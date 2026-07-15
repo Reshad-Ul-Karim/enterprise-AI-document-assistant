@@ -42,7 +42,12 @@ def load_prompt(name: str = "synthesis") -> str:
 class Corpus:
     """The committed corpus: loaded from files at boot, zero network."""
 
-    def __init__(self, index_dir: Path):
+    def __init__(self, index_dir: Path, embedder=None):
+        if embedder is None:
+            from src.providers.pinecone_embed import PineconeEmbedder
+
+            embedder = PineconeEmbedder()
+        self.embedder = embedder
         self.chunks = [Chunk(**json.loads(line)) for line in (index_dir / "chunks.jsonl").open()]
         vectors = np.load(index_dir / "index.npz")["vectors"]
         self.meta = json.loads((index_dir / "index_meta.json").read_text())
@@ -57,12 +62,12 @@ class Corpus:
         self.handbook = [c for c in self.chunks if c.doc_kind == "handbook"]
         statute_mask = [i for i, c in enumerate(self.chunks) if c.doc_kind == "statute"]
         self.statute_retriever = NumpyRetriever(
-            [self.chunks[i] for i in statute_mask], vectors[statute_mask]
+            [self.chunks[i] for i in statute_mask], vectors[statute_mask], embedder
         )
         # The full retriever exists so recall@k is measurable across BOTH documents --
         # otherwise Retrieval Accuracy is measured over 97% of the corpus while the
         # document the business scenario is about stays invisible to the metric.
-        self.full_retriever = NumpyRetriever(self.chunks, vectors)
+        self.full_retriever = NumpyRetriever(self.chunks, vectors, embedder)
 
     def _assert_boot_invariant(self, vectors: np.ndarray) -> None:
         from src.core.embeddings import EMBED_DIM, EMBED_MODEL_ID

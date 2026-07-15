@@ -29,6 +29,7 @@ ErrorCode = Literal[
     "GENERATION_UNCONFIGURED",
     "AUTH_REQUIRED",
     "AUTH_UNCONFIGURED",
+    "INSUFFICIENT_MEMORY",
 ]
 
 

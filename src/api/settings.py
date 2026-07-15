@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -60,3 +62,15 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+# Bridge the .env-loaded key into the process environment.
+#
+# src/core/embeddings.py reads PINECONE_API_KEY from os.environ, NOT from this module -- core
+# may not import api (.importlinter enforces it), and that rule is what lets the whole test
+# suite run with no key and no network. pydantic-settings parses .env into THIS object, not
+# into os.environ, so without this line the key is loaded and still invisible to core.
+#
+# In production Render sets real environment variables and this is a no-op. It matters only
+# for local development, which is exactly where it silently failed.
+if settings.pinecone_api_key:
+    os.environ.setdefault("PINECONE_API_KEY", settings.pinecone_api_key)

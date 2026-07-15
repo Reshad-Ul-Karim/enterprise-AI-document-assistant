@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -11,9 +12,20 @@ import pytest
 REPO = Path(__file__).resolve().parents[1]
 INDEX = REPO / "index"
 
-pytestmark = pytest.mark.skipif(
-    not (INDEX / "chunks.jsonl").exists(), reason="index not built; run python -m src.ingest.build_index"
-)
+# These assert REAL recall, so they need the REAL embedder. Substituting FakeEmbedder would
+# let them pass while measuring nothing, which is worse than skipping: a green test that
+# checks nothing is a lie the next person believes.
+pytestmark = [
+    pytest.mark.skipif(
+        not (INDEX / "chunks.jsonl").exists(),
+        reason="index not built; run python -m src.ingest.build_index",
+    ),
+    pytest.mark.skipif(
+        not os.environ.get("PINECONE_API_KEY"),
+        reason="recall is measured with the real embedder (Pinecone Inference); no key -> skip "
+        "rather than assert recall against fake vectors",
+    ),
+]
 
 
 @pytest.fixture(scope="module")
@@ -21,9 +33,11 @@ def retriever():
     from src.core.models import Chunk
     from src.core.retrieval import NumpyRetriever
 
+    from src.providers.pinecone_embed import PineconeEmbedder
+
     chunks = [Chunk(**json.loads(line)) for line in (INDEX / "chunks.jsonl").open()]
     vectors = np.load(INDEX / "index.npz")["vectors"]
-    return NumpyRetriever(chunks, vectors)
+    return NumpyRetriever(chunks, vectors, PineconeEmbedder())
 
 
 @pytest.mark.parametrize(

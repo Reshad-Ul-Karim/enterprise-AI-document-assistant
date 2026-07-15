@@ -40,6 +40,7 @@ type = layers
 layers =
     src.api
     src.ingest
+    src.providers
     src.core
 
 ; CONTRACT 3 exists because contract 2 was not enough, and a failed deploy taught us that.

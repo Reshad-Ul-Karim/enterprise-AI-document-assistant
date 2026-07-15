@@ -16,7 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from src.core.chunking import chunk_handbook, chunk_statute
-from src.core.embeddings import EMBED_DIM, EMBED_MODEL_ID, QUERY_PREFIX, embed_passages
+from src.core.embeddings import EMBED_DIM, EMBED_MODEL_ID, INPUT_TYPE_QUERY
 from src.core.sections import assert_build_gate, detect_sections
 from src.core.manifest import MANIFEST
 from src.ingest.extract import (
@@ -37,6 +37,16 @@ def _sha256(path: Path) -> str:
 
 
 def main() -> int:
+    # The ingest CLI is an entrypoint in its own right and cannot import api.settings (that
+    # is the layering contract). It loads .env itself so PINECONE_API_KEY reaches
+    # core.embeddings via the process environment.
+    try:
+        from dotenv import load_dotenv
+
+        load_dotenv()
+    except ImportError:
+        pass  # CI and production set real env vars
+
     pages = load_act_ocr()
     statute_text, page_offsets = statute_layer_text(pages)
 
@@ -63,7 +73,9 @@ def main() -> int:
     chunks = statute_chunks + handbook_chunks
     print(f"chunks: {len(chunks)} ({len(statute_chunks)} statute + {len(handbook_chunks)} handbook)")
 
-    vectors = embed_passages([c.text for c in chunks])
+    from src.providers.pinecone_embed import PineconeEmbedder
+
+    vectors = PineconeEmbedder().embed_passages([c.text for c in chunks])
     if vectors.shape != (len(chunks), EMBED_DIM):
         raise SystemExit(f"embedding shape {vectors.shape} != ({len(chunks)}, {EMBED_DIM})")
 
@@ -77,7 +89,7 @@ def main() -> int:
         "index_version": CHUNKER_VERSION,
         "embed_model_id": EMBED_MODEL_ID,
         "embed_dim": EMBED_DIM,
-        "query_prefix_scheme": QUERY_PREFIX,
+        "query_input_type": INPUT_TYPE_QUERY,  # llama-text-embed-v2 is asymmetric
         "chunker_version": CHUNKER_VERSION,
         "chunk_count": len(chunks),
         "section_count": len(sections),

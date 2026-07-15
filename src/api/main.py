@@ -17,6 +17,7 @@ from src.api.auth import AuthRequired, read_session
 from src.api.errors import AppError, GenerationUnconfigured, IndexNotLoaded, app_error_handler
 from src.api.uploads import KbNotFound
 from src.api.kbstore import KbRegistry
+from src.api.memguard import MEMORY_LIMIT_MB, current_rss_mb
 from src.api.rategate import RateGate
 from src.api.routes_kb import router as kb_router
 from src.api.settings import settings
@@ -122,6 +123,8 @@ async def health() -> JSONResponse:
         # it being unreachable must not imply the baseline demo is down.
         "pinecone_reachable": bool(settings.pinecone_api_key),
         "auth_configured": settings.auth_available,
+        "memory_mb": round(current_rss_mb()),
+        "memory_limit_mb": MEMORY_LIMIT_MB,
         "uploads_persist": settings.uploads_persist,
         "error": state["error"],
     }

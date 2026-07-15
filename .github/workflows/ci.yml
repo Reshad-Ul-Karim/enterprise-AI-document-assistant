@@ -40,7 +40,7 @@ jobs:
       - run: pip install -r requirements.txt
       - name: assert the runtime closure is free of torch and the crash-risk packages
         run: |
-          for pkg in torch transformers pyarrow tensorflow streamlit; do
+          for pkg in torch transformers pyarrow tensorflow streamlit fastembed onnxruntime; do
             if pip show "$pkg" > /dev/null 2>&1; then
               echo "::error::$pkg is in the runtime closure."
               exit 1

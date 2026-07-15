@@ -10,3 +10,4 @@ httpx==0.28.1
 import-linter==2.5
 ruff==0.9.6
 PyYAML==6.0.2
+python-dotenv==1.0.1

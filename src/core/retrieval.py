@@ -25,7 +25,7 @@ from typing import Protocol
 
 import numpy as np
 
-from src.core.embeddings import embed_query
+from src.core.embeddings import Embedder
 from src.core.models import Chunk
 
 RRF_K = 60
@@ -64,11 +64,14 @@ class NumpyRetriever:
     Nobody but us can pause it, rate-limit it, or reap it for inactivity.
     """
 
-    def __init__(self, chunks: list[Chunk], vectors: np.ndarray):
+    def __init__(self, chunks: list[Chunk], vectors: np.ndarray, embedder: Embedder):
         if len(chunks) != vectors.shape[0]:
             raise ValueError(f"{len(chunks)} chunks vs {vectors.shape[0]} vectors")
         self.chunks = chunks
         self.vectors = vectors
+        # Injected, not imported: core may not reach for a vendor. This is what lets the
+        # suite run with no key and no network via FakeEmbedder.
+        self.embedder = embedder
         self._bm25 = self._build_bm25(chunks)
         self._by_section: dict[int, list[Chunk]] = {}
         for chunk in chunks:
@@ -82,7 +85,7 @@ class NumpyRetriever:
         return BM25Okapi([tokenise(c.text) for c in chunks])
 
     def search(self, query: str, k: int = DEFAULT_TOP_K) -> list[tuple[Chunk, float]]:
-        dense_scores = self.vectors @ embed_query(query)
+        dense_scores = self.vectors @ self.embedder.embed_query(query)
         dense_rank = np.argsort(-dense_scores)[: k * 4].tolist()
 
         lexical_scores = self._bm25.get_scores(tokenise(query))

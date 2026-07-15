@@ -30,7 +30,7 @@ import numpy as np
 
 from src.api.settings import settings
 from src.api.uploads import KnowledgeBase, UploadBackendUnavailable
-from src.core.embeddings import EMBED_DIM, EMBED_MODEL_ID, embed_passages, embed_query
+from src.core.embeddings import EMBED_DIM, EMBED_MODEL_ID, Embedder
 from src.core.models import Chunk
 from src.core.retrieval import DEFAULT_TOP_K, reciprocal_rank_fusion, tokenise
 
@@ -38,8 +38,9 @@ from src.core.retrieval import DEFAULT_TOP_K, reciprocal_rank_fusion, tokenise
 class InMemoryKbRetriever:
     """Ephemeral. Vectors and BM25 held in RAM, bounded, gone on restart."""
 
-    def __init__(self, kb: KnowledgeBase):
+    def __init__(self, kb: KnowledgeBase, embedder: Embedder):
         self.kb = kb
+        self.embedder = embedder
         self._vectors: np.ndarray | None = None
         self._bm25 = None
 
@@ -49,7 +50,7 @@ class InMemoryKbRetriever:
             return
         from rank_bm25 import BM25Okapi
 
-        self._vectors = embed_passages([c.text for c in self.kb.chunks])
+        self._vectors = self.embedder.embed_passages([c.text for c in self.kb.chunks])
         # Per-namespace BM25, rebuilt in memory at upload -- milliseconds for a few hundred
         # chunks. An earlier draft gave uploads a dense-only path and called it "an honest
         # asymmetry"; it is not honest to hand someone a demonstrably worse pipeline built
@@ -59,7 +60,7 @@ class InMemoryKbRetriever:
     def search(self, query: str, k: int = DEFAULT_TOP_K) -> list[tuple[Chunk, float]]:
         if self._vectors is None or self._bm25 is None:
             return []
-        dense = self._vectors @ embed_query(query)
+        dense = self._vectors @ self.embedder.embed_query(query)
         dense_rank = np.argsort(-dense)[: k * 4].tolist()
         lexical = self._bm25.get_scores(tokenise(query))
         lexical_rank = np.argsort(-lexical)[: k * 4].tolist()
@@ -90,10 +91,11 @@ class PineconeKbRetriever:
     with the vector and an upload survives a restart COMPLETELY.
     """
 
-    def __init__(self, kb: KnowledgeBase, api_key: str, index_name: str):
+    def __init__(self, kb: KnowledgeBase, api_key: str, index_name: str, embedder: Embedder):
         from pinecone import Pinecone, ServerlessSpec
 
         self.kb = kb
+        self.embedder = embedder
         self.namespace = f"kb_{kb.kb_id}"
         pc = Pinecone(api_key=api_key)
         existing = {i["name"] for i in pc.list_indexes()}
@@ -119,7 +121,7 @@ class PineconeKbRetriever:
     def upsert(self, chunks: list[Chunk]) -> None:
         import json
 
-        vectors = embed_passages([c.text for c in chunks])
+        vectors = self.embedder.embed_passages([c.text for c in chunks])
         payload = []
         for chunk, vector in zip(chunks, vectors):
             metadata = {
@@ -155,7 +157,7 @@ class PineconeKbRetriever:
 
     def search(self, query: str, k: int = DEFAULT_TOP_K) -> list[tuple[Chunk, float]]:
         result = self.index.query(
-            vector=embed_query(query).tolist(),
+            vector=self.embedder.embed_query(query).tolist(),
             top_k=k,
             namespace=self.namespace,
             include_metadata=True,
@@ -191,7 +193,12 @@ class PineconeKbRetriever:
 class KbRegistry:
     """The knowledge bases this process knows about, and the jobs feeding them."""
 
-    def __init__(self) -> None:
+    def __init__(self, embedder: Embedder | None = None) -> None:
+        if embedder is None:
+            from src.providers.pinecone_embed import PineconeEmbedder
+
+            embedder = PineconeEmbedder()
+        self.embedder = embedder
         self.kbs: dict[str, KnowledgeBase] = {}
         self.retrievers: dict[str, object] = {}
         self.jobs: dict[str, object] = {}
@@ -281,10 +288,10 @@ class KbRegistry:
         self.kbs[kb_id] = kb
         if settings.uploads_persist:
             self.retrievers[kb_id] = PineconeKbRetriever(
-                kb, settings.pinecone_api_key, settings.pinecone_index  # type: ignore[arg-type]
+                kb, settings.pinecone_api_key, settings.pinecone_index, self.embedder  # type: ignore[arg-type]
             )
         else:
-            self.retrievers[kb_id] = InMemoryKbRetriever(kb)
+            self.retrievers[kb_id] = InMemoryKbRetriever(kb, self.embedder)
         return kb
 
     def index_after_upload(self, kb_id: str, new_chunks: list[Chunk]) -> None:

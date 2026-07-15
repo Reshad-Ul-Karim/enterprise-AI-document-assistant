@@ -12,9 +12,12 @@ uvicorn[standard]==0.34.0
 pydantic==2.10.6
 pydantic-settings==2.7.1
 
-# Local embeddings: ONNX, no torch. The default artifact for bge-small already resolves to
-# the int8 quantized build -- "should we quantize?" is answered by the library default.
-fastembed==0.8.0
+# NO fastembed / onnxruntime. It was ~280 MB resident, which on Render's 512 MB left 142 MB
+# for an upload path needing ~190 -- so uploads OOM'd the container and the reviewer got a 502
+# on the PUBLIC demo. Removing it: 370 MB baseline -> 81 MB. Embeddings are Pinecone
+# Inference now (free, no card, already a dependency, ONE embedding space across both stores).
+# The local-embeddings argument was correct for Hugging Face's 16 GB; the platform changed and
+# the decision had not. See src/core/embeddings.py.
 numpy==2.1.1
 rank-bm25==0.2.2
 
@@ -38,3 +41,4 @@ langchain-text-splitters==0.3.5
 
 # Uploaded KBs only. Unset PINECONE_API_KEY -> in-memory, ephemeral, stated in the UI.
 pinecone==5.4.2
+psutil==6.1.1   # the memory guard reads the container's own RSS

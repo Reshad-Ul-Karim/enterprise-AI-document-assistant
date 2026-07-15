@@ -136,3 +136,63 @@ def test_every_app_error_code_is_declared_in_the_literal():
             "The handler would fail validation and return 500 instead of "
             f"{cls.status_code}."
         )
+
+
+def test_onnxruntime_is_not_a_runtime_dependency():
+    """THE regression guard for a real production outage.
+
+    fastembed/onnxruntime was ~280 MB resident. On Render's 512 MB that left 142 MB for an
+    upload path needing ~190, so uploads OOM-killed the container and the reviewer got a 502
+    -- on the PUBLIC demo, which had nothing to do with uploads and was working fine.
+
+    Measured: 370 MB baseline with it, 81 MB without. No batching or capping fixes a baseline
+    that is 72% of the ceiling; that is arithmetic, not tuning.
+
+    The local-embeddings decision was CORRECT when the target was Hugging Face's 16 GB. HF
+    made Docker Spaces PRO-only, we moved to a box with 32x less RAM, and the premise died
+    without the decision being revisited. This test is what notices if it comes back.
+    """
+    names = {
+        re.split(r"[=<>\[]", line.split("#")[0].strip().lower())[0].strip()
+        for line in (REPO / "requirements.txt").read_text().splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    }
+    for banned in ("fastembed", "onnxruntime", "sentence-transformers"):
+        assert banned not in names, (
+            f"{banned!r} is back in the runtime. It costs ~280 MB resident and reintroduces "
+            "the upload OOM that took the public demo down with a 502."
+        )
+
+
+def test_the_memory_guard_refuses_instead_of_dying():
+    """A guard that refuses beats a process that dies.
+
+    Refusing -> one user gets a typed 503 that explains itself; everyone else is unaffected.
+    Dying   -> Render kills the container and EVERY user, including the reviewer on the public
+               demo, gets a 502 through the ~60 s cold start.
+    """
+    import pytest
+
+    from src.api.memguard import InsufficientMemory, assert_room_to_ingest, estimate_ingest_mb
+
+    assert_room_to_ingest(0)  # a healthy process must not be blocked
+
+    with pytest.raises(InsufficientMemory) as excinfo:
+        assert_room_to_ingest(10_000)  # a request that obviously cannot fit
+    assert excinfo.value.status_code == 503
+
+    # Pessimistic on purpose: under-estimating causes the OOM the guard exists to prevent.
+    assert estimate_ingest_mb(20_000_000, 60) > 100
+
+
+def test_index_and_runtime_agree_on_the_embedding_model():
+    """Query and passage vectors MUST come from the same model or results are silently
+    incomparable -- wrong in the way that never throws. The index was rebuilt from 384-dim
+    bge-small to 1024-dim llama-text-embed-v2; a stale index must fail loudly at boot."""
+    import json
+
+    from src.core.embeddings import EMBED_DIM, EMBED_MODEL_ID
+
+    meta = json.loads((REPO / "index" / "index_meta.json").read_text())
+    assert meta["embed_model_id"] == EMBED_MODEL_ID
+    assert meta["embed_dim"] == EMBED_DIM

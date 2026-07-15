@@ -34,6 +34,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from src.api.errors import AppError
+from src.api.memguard import assert_room_to_ingest, estimate_ingest_mb
 from src.api.settings import settings
 from src.core.models import Chunk
 
@@ -220,6 +221,11 @@ def ingest(pdf_bytes: bytes, filename: str, kb: KnowledgeBase, job: Job) -> None
 
     job.state = "extracting"
     pages, needs_ocr = assess_extractability(pdf_bytes)
+
+    # Check BEFORE the expensive part. If this instance is already near its limit, refusing
+    # one upload with a typed 503 is strictly better than being OOM-killed and handing every
+    # user -- including whoever is on the public demo -- a 502.
+    assert_room_to_ingest(estimate_ingest_mb(len(pdf_bytes), pages))
 
     if pages > settings.max_upload_pages:
         raise PayloadTooLarge(
