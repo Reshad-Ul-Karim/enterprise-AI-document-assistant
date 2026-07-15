@@ -35,8 +35,17 @@ def test_readme_quotes_the_real_embedding_model():
 
 
 def test_readme_quotes_the_real_index_size_and_dimension():
-    assert str(STATS["index"]["index_mb"]) in README
-    assert str(STATS["index"]["embed_dim"]) in README
+    """Catch DRIFT (384 vs 1024, 0.74 MB vs 1.97 MB), not rounding.
+
+    An earlier version demanded the literal "1.974" and failed on prose that said "1.97 MB".
+    That is the test dictating style rather than guarding truth -- and a test that forces
+    ugly precision into a sentence will get deleted by the next person, taking the real
+    guard with it. Sensible rounding is allowed; a stale number is not.
+    """
+    mb = STATS["index"]["index_mb"]
+    assert any(f"{mb:.{p}f}" in README for p in (1, 2, 3)), f"README must quote the real index size (~{mb} MB)"
+    assert str(STATS["index"]["embed_dim"]) in README, "README must quote the real embedding dimension"
+    assert "384" not in README.replace("3,84", ""), "384 is the OLD embedder's dimension"
 
 
 def test_readme_quotes_the_real_chunk_and_token_counts():
