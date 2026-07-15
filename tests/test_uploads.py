@@ -97,3 +97,36 @@ def test_oversized_upload_is_rejected_before_any_work():
     huge = b"x" * (settings.max_upload_mb * 1_000_000 + 1)
     with pytest.raises(PayloadTooLarge):
         ingest(huge, "big.pdf", kb, Job(job_id="1", kb_id="k", filename="big.pdf"))
+
+
+def test_create_is_atomic_and_leaves_no_half_made_notebook():
+    """The bug behind two unrelated-looking reports.
+
+    create() registered the KB and THEN built the retriever, so when the retriever raised
+    (the dimension guard, correctly, on a 384-dim index vs a 1024-dim embedder) the notebook
+    was left in self.kbs with no retriever. The user saw "Failed to fetch", refreshed, and it
+    was THERE -- then uploading died with `KeyError: 'newdox'` from self.retrievers[kb_id].
+
+    A partially-applied mutation is worse than a failure: the failure is visible, the partial
+    state is not.
+    """
+    from unittest.mock import patch
+
+    import pytest
+
+    from src.api.kbstore import KbRegistry
+    from src.core.embeddings import FakeEmbedder
+
+    registry = KbRegistry(embedder=FakeEmbedder())
+
+    with patch("src.api.kbstore.settings") as fake_settings:
+        fake_settings.uploads_persist = True
+        fake_settings.pinecone_api_key = "x"
+        fake_settings.pinecone_index = "y"
+        fake_settings.max_inmemory_kbs = 3
+        with patch("src.api.kbstore.PineconeKbRetriever", side_effect=RuntimeError("boom")):
+            with pytest.raises(RuntimeError):
+                registry.create("halfmade", "Half made")
+
+    assert "halfmade" not in registry.kbs, "a failed create must leave NO notebook behind"
+    assert "halfmade" not in registry.retrievers

@@ -94,20 +94,34 @@ async def list_kbs(request: Request, user: CurrentUser) -> dict[str, object]:
 
 @router.post("/kb", status_code=201)
 async def create_kb(body: CreateKbRequest, request: Request, user: CurrentUser) -> dict[str, str]:
+    """Creating a notebook does ~3.5s of BLOCKING network I/O (Pinecone list_indexes +
+    describe_index_stats), so it runs in a threadpool.
+
+    In an `async def` route, a blocking call does not just make THAT request slow -- it
+    freezes the entire event loop. On a single-worker box that means every other request,
+    including /health, stalls behind it. Render's health check failing is a restart, and a
+    restart mid-request is exactly the "Failed to fetch" the user saw.
+
+    run_in_threadpool is the whole fix: the socket work happens off the loop.
+    """
+    from starlette.concurrency import run_in_threadpool
+
     registry = request.app.state.registry
     kb_id = re.sub(r"[^a-z0-9]+", "-", body.name.lower()).strip("-")[:32] or uuid.uuid4().hex[:8]
     if kb_id in registry.kbs:
         kb_id = f"{kb_id}-{uuid.uuid4().hex[:4]}"
-    kb = registry.create(kb_id, body.name)
+    kb = await run_in_threadpool(registry.create, kb_id, body.name)
     return {"kb_id": kb.kb_id, "name": kb.name}
 
 
 @router.delete("/kb/{kb_id}")
 async def delete_kb(kb_id: str, request: Request, user: CurrentUser) -> dict[str, bool]:
+    from starlette.concurrency import run_in_threadpool
+
     registry = request.app.state.registry
     if kb_id not in registry.kbs:
         raise KbNotFound(f"No knowledge base {kb_id!r}.")
-    registry.delete(kb_id)
+    await run_in_threadpool(registry.delete, kb_id)  # deletes the namespace: network I/O
     return {"ok": True}
 
 

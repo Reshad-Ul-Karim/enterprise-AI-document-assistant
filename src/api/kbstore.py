@@ -284,14 +284,28 @@ class KbRegistry:
                 f"PINECONE_API_KEY), and is capped at {settings.max_inmemory_kbs} to protect "
                 f"the public demo from an out-of-memory kill on a 512 MB box. Delete one first."
             )
+        # ATOMIC. Build the retriever FIRST; register only if it succeeded.
+        #
+        # This used to register the KB and then construct the retriever, so a failure left a
+        # half-created notebook: present in self.kbs, with no retriever. The user saw
+        # "Failed to fetch" (the error response), refreshed, and the notebook was THERE --
+        # because the first line had already run. Uploading to it then died with
+        # `KeyError: 'newdox'` from self.retrievers[kb_id]. One non-atomic function, two
+        # unrelated-looking bug reports.
+        #
+        # What actually failed underneath was the dimension check doing its job: the index
+        # had been created at 384 for bge-small and the embedder now produces 1024. The guard
+        # was right. The bookkeeping around it was not.
         kb = KnowledgeBase(kb_id=kb_id, name=name)
-        self.kbs[kb_id] = kb
         if settings.uploads_persist:
-            self.retrievers[kb_id] = PineconeKbRetriever(
+            retriever = PineconeKbRetriever(
                 kb, settings.pinecone_api_key, settings.pinecone_index, self.embedder  # type: ignore[arg-type]
             )
         else:
-            self.retrievers[kb_id] = InMemoryKbRetriever(kb, self.embedder)
+            retriever = InMemoryKbRetriever(kb, self.embedder)
+
+        self.kbs[kb_id] = kb
+        self.retrievers[kb_id] = retriever
         return kb
 
     def index_after_upload(self, kb_id: str, new_chunks: list[Chunk]) -> None:
