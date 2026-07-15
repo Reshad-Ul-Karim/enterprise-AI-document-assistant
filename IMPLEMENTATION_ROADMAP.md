@@ -381,7 +381,16 @@ ways for the live URL to die) · Streamlit (you must build FastAPI anyway for th
 
 ### Deploy
 
-**HF Spaces free** — 16 GB RAM, Docker on **port 7860**, `/tmp`-only writes. Render free is 512 MB + spindown.
+**Render free** — 512 MB, 0.1 CPU, **no credit card**, Docker, 750 hrs/month, spins down after 15 min idle.
+
+> **CORRECTION, verified against the live API on 2026-07-15.** This roadmap originally said "HF Spaces free — 16 GB RAM, Docker".
+> **That tier no longer exists.** HF now requires a PRO subscription (a card) for Docker, Gradio *and* Streamlit Spaces; creating
+> one returns `402 Payment Required`. Only `static` Spaces are free, and a static Space cannot run FastAPI.
+>
+> **The consequence is architectural, not cosmetic.** 16 GB → 512 MB turns local embeddings from a free lunch into a live
+> constraint: measured peak RSS is **435 MB** (onnxruntime ~280 MB of it) against a 512 MB ceiling — ~15% headroom. The tested
+> fallback is `mistral-embed` for queries (~150 MB, removes onnxruntime), costing a second API call per query. **The council's
+> ruling "local compute is free, API requests are scarce" was correct on its premises; one of those premises changed.**
 
 **Bake the embedding model at BUILD time.** fastembed's default cache is a temp dir and HF's disk is ephemeral, so an unbaked model
 re-downloads on **every cold start** (+10.7s and a hard dependency on HF's CDN at boot — a CDN hiccup boots the Space broken, on the

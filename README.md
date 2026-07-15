@@ -70,7 +70,7 @@ flowchart TB
     end
     EMB --> IDX
 
-    subgraph RUN ["RUNTIME — HF Spaces free · 2 vCPU · no GPU · no tesseract · no PDFs"]
+    subgraph RUN ["RUNTIME — Render free · 512 MB · 0.1 CPU · no GPU · no tesseract · no PDFs"]
         direction TB
         UI["static UI · 6 chips · single-flight"]
         API["FastAPI · typed errors · rate gate"]
@@ -94,8 +94,27 @@ flowchart TB
 ```
 
 **The line that makes free hosting survivable is the one across the middle.** Ingestion is an offline batch pipeline; serving is a
-stateless online service. OCR-ing 181 scanned pages on a 2-vCPU box during a cold start — while a reviewer waits — would blow the
+stateless online service. OCR-ing 181 scanned pages on a 0.1-CPU box during a cold start — while a reviewer waits — would blow the
 timeout, the memory limit and their patience at once. So the runtime image contains **no tesseract, no PDFs, no torch**.
+
+### Where this is deployed, and why not Hugging Face
+
+**Render free tier: 512 MB, 0.1 CPU, no credit card, 750 hrs/month.**
+
+I planned this for Hugging Face Spaces and had to change it. **As of 2026 HF requires a PRO subscription for Docker, Gradio *and*
+Streamlit Spaces** — only `static` Spaces remain free, and a static Space cannot run FastAPI. I verified that against their API
+rather than their docs: creating a Docker Space returns `402 Payment Required`. Guides describing "free 16 GB Docker Spaces"
+describe a tier that no longer exists.
+
+**That change has an architectural consequence worth naming**: 16 GB → 512 MB makes local embeddings a genuine constraint rather
+than a free lunch. Measured peak RSS is **~435 MB**, of which `onnxruntime` is ~280 MB. It fits, with ~15% headroom. If it proves
+too tight under load, the tested fallback is `mistral-embed` for query embedding — that drops the image to ~150 MB by removing
+onnxruntime entirely, at the cost of a second API call per query. *On a rate-limited free tier that trade is real: requests are the
+scarce resource, not dollars.*
+
+**Known free-tier behaviour, disclosed rather than discovered:** the service **spins down after 15 minutes idle** and takes ~1
+minute to wake. A GitHub Actions cron pings `/health` every 10 minutes to keep it warm. That is a workaround for a free tier, not
+an architectural claim.
 
 ### Measured (`corpus_stats.json`)
 
