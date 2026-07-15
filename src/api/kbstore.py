@@ -129,6 +129,12 @@ class PineconeKbRetriever:
                 "printed_page": chunk.printed_page,
                 "zero_based_pdf_index": chunk.zero_based_pdf_index,
                 "source_modality": chunk.source_modality,
+                # Carried so the KB can REHYDRATE itself after a restart. Persisting vectors
+                # while forgetting the notebook's name and which files are in it means the
+                # data survives and the user's notebook still disappears from the UI --
+                # which is the failure this whole backend exists to prevent.
+                "kb_name": self.kb.name,
+                "filename": self.kb.docs.get(chunk.doc_id, chunk.doc_title),
             }
             # Fail the INGEST, never the query: a chunk that cannot round-trip must be
             # rejected while the user is watching, not discovered as a missing citation.
@@ -189,6 +195,80 @@ class KbRegistry:
         self.kbs: dict[str, KnowledgeBase] = {}
         self.retrievers: dict[str, object] = {}
         self.jobs: dict[str, object] = {}
+
+    def rehydrate(self) -> int:
+        """Rebuild the notebooks from Pinecone at boot.
+
+        Persistence is not "the vectors are still in the database" -- it is "my notebook is
+        still there when I come back". Without this, an upload survives the restart and the
+        user still sees an empty list, which is indistinguishable from having lost it.
+
+        Pinecone knows the namespaces; each chunk's metadata carries its text, its notebook
+        name and its filename, so a full restore needs no second datastore. BM25 is rebuilt
+        in memory from the restored chunks -- milliseconds for a few hundred.
+
+        Best-effort by construction: if Pinecone is unreachable this logs and returns 0. The
+        committed demo corpus is a local file and is unaffected, so a Pinecone outage must
+        never stop the app from booting.
+        """
+        if not settings.uploads_persist:
+            return 0
+        try:
+            from pinecone import Pinecone
+
+            pc = Pinecone(api_key=settings.pinecone_api_key)
+            if settings.pinecone_index not in {i["name"] for i in pc.list_indexes()}:
+                return 0
+            index = pc.Index(settings.pinecone_index)
+            stats = index.describe_index_stats()
+            restored = 0
+            for namespace in stats.get("namespaces", {}):
+                if not namespace.startswith("kb_"):
+                    continue
+                kb_id = namespace[3:]
+                # list_paginated, not list(): iterating a ListResponse yields ListItem
+                # objects, not id strings, so `for i in page` silently produces things that
+                # fetch nothing -- the namespace looked restored with zero chunks in it.
+                ids: list[str] = []
+                token = None
+                while True:
+                    page = index.list_paginated(namespace=namespace, limit=100, pagination_token=token)
+                    ids.extend(v.id for v in page.vectors)
+                    token = getattr(page.pagination, "next", None) if page.pagination else None
+                    if not token:
+                        break
+                if not ids:
+                    continue
+                chunks: list[Chunk] = []
+                name, docs = kb_id, {}
+                for start in range(0, len(ids), 100):  # fetch is capped per call
+                    fetched = index.fetch(ids=ids[start : start + 100], namespace=namespace)
+                    for vector_id, record in fetched.vectors.items():
+                        md = record.metadata or {}
+                        name = md.get("kb_name", name)
+                        docs[md.get("doc_id", "")] = md.get("filename", md.get("doc_title", ""))
+                        chunks.append(
+                            Chunk(
+                                chunk_id=vector_id,
+                                kb_id=kb_id,
+                                doc_id=md.get("doc_id", ""),
+                                doc_title=md.get("doc_title", ""),
+                                doc_kind="uploaded",
+                                text=md.get("text", ""),
+                                zero_based_pdf_index=int(md.get("zero_based_pdf_index", 0)),
+                                printed_page=int(md.get("printed_page", 1)),
+                                source_modality=md.get("source_modality", "text"),
+                            )
+                        )
+                kb = self.create(kb_id, name)
+                kb.chunks = chunks
+                kb.docs = {k: v for k, v in docs.items() if k}
+                self.retrievers[kb_id]._rebuild_bm25()  # type: ignore[union-attr]
+                restored += 1
+            return restored
+        except Exception as exc:
+            print(f'{{"event":"rehydrate_failed","error":"{type(exc).__name__}: {exc}"}}')
+            return 0
 
     def create(self, kb_id: str, name: str) -> KnowledgeBase:
         if not settings.uploads_persist and len(self.kbs) >= settings.max_inmemory_kbs:

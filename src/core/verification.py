@@ -133,27 +133,48 @@ def verify_answer(raw: str, context: list[Chunk]) -> tuple[str, list[Citation], 
     citations: list[Citation] = []
     stripped = 0
     total = 0
+    model_declared = bool(INSUFFICIENT_RE.search(raw))
 
-    def _replace(match: re.Match[str]) -> str:
-        nonlocal stripped, total
-        total += 1
-        chunk = by_id.get(match.group("chunk_id"))
-        quote = match.group("quote")
-        if chunk is None or not verify_span(quote, chunk):
-            stripped += 1
-            return ""  # the claim is removed, not softened
-        citation = build_citation(chunk, quote)
-        if citation not in citations:
-            citations.append(citation)
-        return quote
+    # LINE BY LINE, because stripping a marker removes the CITATION, not the SENTENCE.
+    #
+    # Observed live: the model answered "Chairperson: Sultana Hashem" with a marker that
+    # verified, and "Head office: Shanta Western Tower..." with one that did not. Deleting
+    # only the failed marker left the address asserted with nothing behind it -- carried past
+    # the gate by a DIFFERENT claim that happened to verify. An unsupported fact rendered as
+    # though it were sourced is precisely what this system exists to make impossible.
+    #
+    # So: a line whose markers ALL failed loses its evidence and is dropped whole. A line
+    # with no markers is prose or structure (headings, connectives) and is kept. This is
+    # blunt -- it can drop a line the model got right -- and that trade is deliberate:
+    # completeness is worth less than the guarantee.
+    kept_lines: list[str] = []
+    for line in INSUFFICIENT_RE.sub("", raw).split("\n"):
+        markers = list(CLAIM_RE.finditer(line))
+        if not markers:
+            kept_lines.append(line)
+            continue
 
-    answer = CLAIM_RE.sub(_replace, raw)
+        line_ok = 0
+        for m in markers:
+            total += 1
+            chunk = by_id.get(m.group("chunk_id"))
+            quote = m.group("quote")
+            if chunk is None or not verify_span(quote, chunk):
+                stripped += 1
+                continue
+            line_ok += 1
+            citation = build_citation(chunk, quote)
+            if citation not in citations:
+                citations.append(citation)
 
-    # The model declared it cannot answer. Its related citations survive as "related
-    # sources" beside an honest refusal rather than masquerading as an answer.
-    model_declared = bool(INSUFFICIENT_RE.search(answer))
-    answer = INSUFFICIENT_RE.sub("", answer)
-    answer = re.sub(r"[ \t]{2,}", " ", answer).strip()
+        if line_ok:
+            # Remove the marker; do NOT inline the quote. The verbatim text is rendered once,
+            # in Sources, sliced from the chunk by code. Inlining it printed the quote twice.
+            kept_lines.append(CLAIM_RE.sub("", line))
+
+    answer = "\n".join(kept_lines)
+    answer = re.sub(r"[ \t]{2,}", " ", answer)
+    answer = re.sub(r"\n{3,}", "\n\n", answer).strip()
 
     # Code-forced refusal: nothing the model claimed could be verified against the source.
     # This is the branch the model cannot talk its way out of.

@@ -29,15 +29,22 @@ CHUNK = Chunk(
 
 
 def test_verified_claim_survives_and_produces_a_typed_citation():
-    raw = "You get [[chunk:statute:s115|casual leave with full wages for ten days]] per year."
+    """The intended shape: the FACT is the model's prose, the marker is its EVIDENCE.
+
+    (An earlier version of this test put the fact inside the marker and asserted the quote
+    was inlined. That was testing a bug: it printed the quote twice, once in the prose and
+    once in Sources. The prompt now tells the model to state the claim and cite it.)
+    """
+    raw = "You are entitled to 10 days [[chunk:statute:s115|casual leave with full wages for ten days]]."
     text, citations, insufficient = verify_answer(raw, [CHUNK])
 
     assert not insufficient
-    assert "ten days" in text
-    assert "[[chunk:" not in text  # the marker is consumed, never shown to the user
+    assert "10 days" in text                       # the model's own words survive
+    assert "[[chunk:" not in text                  # the marker is consumed, never shown
+    assert "full wages for ten days" not in text   # the quote lives in Sources, not the prose
     assert len(citations) == 1
     assert citations[0].section_no == 115
-    assert citations[0].printed_page == 59  # assertable BECAUSE it is a typed object
+    assert citations[0].printed_page == 59         # assertable BECAUSE it is a typed object
 
 
 def test_fabricated_quote_is_stripped_and_forces_abstention():
@@ -149,3 +156,50 @@ def test_an_ellipsis_quote_is_still_rejected():
     production alongside the quotation-mark bug; this one SHOULD fail.
     """
     assert not verify_span('"Every worker... casual leave"', CHUNK)
+
+
+def test_the_verified_quote_is_not_inlined_into_the_prose():
+    """Observed live: the answer read
+         Chairperson: Sultana Hashem
+         Sultana Hashem Chairperson
+    because a verified marker was replaced with its own quote text, printing it twice. The
+    verbatim text belongs in Sources exactly once, sliced from the chunk by code."""
+    raw = "You get 10 days [[chunk:statute:s115|casual leave with full wages for ten days]]."
+    text, citations, insufficient = verify_answer(raw, [CHUNK])
+
+    assert not insufficient
+    assert len(citations) == 1
+    assert citations[0].snippet == "casual leave with full wages for ten days"
+    assert "casual leave with full wages" not in text, "the quote must not be inlined"
+    assert text.startswith("You get 10 days")
+
+
+def test_a_claim_whose_evidence_failed_is_dropped_WHOLE():
+    """The hole this closes: stripping a marker removes the CITATION, not the SENTENCE.
+
+    Live, the model answered the Chairperson (verified) and the head-office address (its
+    quote failed). Deleting only the failed marker left the address asserted with nothing
+    behind it, carried past the gate by the Chairperson's citation. An unsupported fact
+    rendered as though sourced is exactly what this system exists to prevent.
+    """
+    raw = (
+        "Chairperson: Sultana Hashem [[chunk:statute:s115|Every worker shall be entitled]]\n"
+        "Head office: Shanta Western Tower [[chunk:statute:s115|the head office is in Dhaka]]"
+    )
+    text, citations, insufficient = verify_answer(raw, [CHUNK])
+
+    assert not insufficient                       # the first claim verified
+    assert "Sultana Hashem" in text               # ...so its line survives
+    assert "Shanta Western Tower" not in text, (
+        "a line whose only evidence failed must be dropped whole, not left uncited"
+    )
+    assert len(citations) == 1
+
+
+def test_prose_and_headings_without_markers_survive():
+    """Dropping unsupported CLAIMS must not shred the answer's structure."""
+    raw = "### Key findings\n\nHere is what I found:\n\nYou get 10 days [[chunk:statute:s115|for ten days]]."
+    text, _, insufficient = verify_answer(raw, [CHUNK])
+    assert not insufficient
+    assert "### Key findings" in text
+    assert "Here is what I found" in text

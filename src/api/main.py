@@ -52,6 +52,13 @@ async def lifespan(app: FastAPI):
         _log("index_load_failed", error=state["error"])
 
     app.state.registry = KbRegistry()
+    # Restore uploaded notebooks from Pinecone. Persisting vectors while forgetting the
+    # notebook means the data survives and the user still sees an empty list -- which is
+    # indistinguishable from having lost it. Best-effort: a Pinecone outage must never stop
+    # the app booting, because the public demo corpus is a local file and is unaffected.
+    restored = app.state.registry.rehydrate()
+    if restored:
+        _log("kbs_rehydrated", count=restored)
     state["gate"] = RateGate(settings.max_concurrent_requests, settings.requests_per_second)
     if settings.generation_available:
         from src.api.providers.mistral import MistralGenerator
