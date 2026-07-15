@@ -104,3 +104,15 @@ def test_a_hallucinated_citation_cannot_escape_the_pipeline():
 
     assert response.insufficient_information is True
     assert "forty days" not in response.answer
+
+
+def test_health_answers_HEAD_not_just_GET(client):
+    """Uptime monitors send HEAD by default -- it is the cheapest liveness probe.
+
+    FastAPI's APIRoute does NOT auto-add HEAD to a GET route (plain Starlette's Route does),
+    so `@app.get("/health")` alone returns 405 Method Not Allowed to every monitor on earth.
+    Found in production by UptimeRobot within minutes of pointing it at the deployment.
+    """
+    response = client.head("/health")
+    assert response.status_code == 200, "HEAD /health must not 405 -- monitors default to HEAD"
+    assert client.get("/health").status_code == 200

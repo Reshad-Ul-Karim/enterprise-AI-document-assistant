@@ -90,7 +90,12 @@ def _generator() -> Generator:
     return state["generator"]  # type: ignore[return-value]
 
 
-@app.get("/health")
+# GET *and* HEAD. FastAPI's APIRoute does NOT auto-add HEAD to a GET route the way plain
+# Starlette's Route does, so `@app.get` alone answers HEAD with 405 Method Not Allowed.
+# Uptime monitors send HEAD by default -- it is the cheapest possible liveness probe, since
+# the server sends headers and no body. A health endpoint that rejects the standard health
+# check is a real defect, and an external monitor found it in production within minutes.
+@app.api_route("/health", methods=["GET", "HEAD"])
 async def health() -> JSONResponse:
     corpus = state["corpus"]
     body = {
