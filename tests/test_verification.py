@@ -203,3 +203,39 @@ def test_prose_and_headings_without_markers_survive():
     assert not insufficient
     assert "### Key findings" in text
     assert "Here is what I found" in text
+
+
+def test_ocr_typos_in_the_SOURCE_do_not_refuse_a_correct_quote():
+    """MEASURED failure. s.118 of the Act reads "in a calender year" -- the typo is the
+    document's, faithfully OCR'd. The model quoted "calendar year", silently correcting it,
+    and exact matching refused a correct answer about festival holidays. On a corpus that is
+    97% OCR'd this is systemic: byte-exactness punishes the model for the scan's errors."""
+    c = Chunk(**{**CHUNK.model_dump(),
+                 "text": "118. Festival holidays : Every worker shall be allowed in a calender year "
+                         "eleven days of paid festival holidays."})
+    assert verify_span("allowed in a calendar year eleven days of paid festival holidays", c)
+
+
+def test_the_snippet_shows_the_SOURCES_spelling_not_the_models():
+    """The reviewer must see what the PDF actually says -- typo included -- because that is
+    what they will find when they check it."""
+    c = Chunk(**{**CHUNK.model_dump(), "text": "allowed in a calender year eleven days"})
+    _, citations, _ = verify_answer("Eleven days [[chunk:statute:s115|in a calendar year eleven days]].", [c])
+    assert citations and "calender" in citations[0].snippet, "snippet must be sliced from source"
+
+
+def test_fuzziness_can_never_change_a_NUMBER():
+    """The whole tolerance is worthless if it lets a quantity drift -- these answers turn on
+    quantities. One char of slack on long words; short tokens and anything with a digit are
+    exact-only."""
+    c = Chunk(**{**CHUNK.model_dump(), "text": "entitled to ten days of casual leave in 14 months"})
+    assert verify_span("entitled to ten days", c)
+    assert not verify_span("entitled to two days", c), "ten -> two must NOT match"
+    assert not verify_span("entitled to tan days", c), "short tokens are exact-only"
+    assert not verify_span("casual leave in 4 months", c), "digits must never fuzz"
+
+
+def test_eleven_cannot_become_seven():
+    c = Chunk(**{**CHUNK.model_dump(), "text": "eleven days of paid festival holidays"})
+    assert verify_span("eleven days of paid festival", c)
+    assert not verify_span("seven days of paid festival", c)

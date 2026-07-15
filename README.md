@@ -241,6 +241,44 @@ failure — and 422 would make the eval harness score every *correct* refusal as
 
 ---
 
+## Measured, not asserted
+
+`python -m evals.harness` — 30 hand-written questions in four tiers, run against the live pipeline.
+**These are the real numbers, including the ones that don't flatter it.**
+
+| | |
+|---|---|
+| **recall@5** | **0.875** (n=16 questions with a gold section) |
+| **False-answer rate (FN)** | **0.00** — it has never once answered something it should have refused |
+| **False-refusal rate (FP)** | **~0.36** — it refuses answerable questions about a third of the time |
+| Tier D (unanswerable) | **6/6 correct** |
+
+**The system errs on the safe side, and that is a deliberate trade I can defend.** Every claim must
+quote its source, and the quote is checked against the raw text; if nothing verifies, the answer is
+discarded. That guarantees you never see a confident fabrication — at the cost of sometimes seeing
+"not found" for something the corpus does contain. Given the choice, on a *compliance* assistant, I
+would rather under-answer than mis-answer.
+
+**Why the false refusals happen, specifically.** The corpus is 97% OCR'd, so the source contains real
+errors — s.115 literally reads *"casual leave the full wages"*, s.118 reads *"in a calender year"*,
+s.108 reads *"Extra-ailowance"*. The model, being a careful writer, silently **corrects** them when
+quoting — and a corrected quote does not exist in the source, so the claim is stripped. Two fixes are
+in: the prompt now instructs it to copy the text exactly including mistakes, and the verifier tolerates
+one character of drift per long word (`calender`→`calendar` passes) while **numbers and short tokens
+must match exactly** (`ten`→`two`, `eleven`→`seven`, `14`→`4` all correctly fail — see
+`tests/test_verification.py`). That took FP from 0.57 → 0.36. Closing the rest is the next job.
+
+**n=30 → 95% CI ≈ ±10.7pp.** An honest wide interval beats a fake tight one.
+
+**The judge is Gemini, not Mistral** — cross-*family*, not cross-tier. Models score their own family's
+output higher, so a Mistral judge on a Mistral answerer buys insurance that does not insure. The
+zero-billing constraint forced the *more* valid eval here, which is worth saying out loud.
+
+**The grep audit runs before any metric.** Every Tier-D "unanswerable" claim is proved against our own
+OCR, and the grep is committed. It immediately caught a question I had got wrong: I claimed the corpus
+was silent on pensions, and `pension` appears **19 times** in the Act (s.163, s.24, s.160). The
+question was removed rather than the audit weakened — *an audit you edit to pass is not an audit.*
+
 ## API
 
 ```

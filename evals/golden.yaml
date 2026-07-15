@@ -1,0 +1,245 @@
+# Golden set — 30 questions, four tiers.
+#
+# WRITTEN BEFORE THE RETRIEVAL PIPELINE WAS TUNED. The questions come from the PDFs, not
+# from what the system happens to do well. Tuning against a set you wrote afterwards
+# measures your memory, not your retriever.
+#
+# ⚠️ EVERY ROW MUST BE HAND-VERIFIED AGAINST THE RENDERED PAGE before any number from this
+# file is quoted. This is not ceremony. The first expert council's eval lead contaminated
+# their own tiers in two ways, and both would have actively made the system worse:
+#
+#   * Tier D ("unanswerable") listed overtime, minimum wage, grievance and notice period as
+#     "verified TRULY ABSENT". All four are in the Act (ss.108, 138/140, 33, 26) -- and the
+#     SAME document listed two of them under Tier B ("MUST ANSWER"). Contradictory gold
+#     labels in one deliverable, behind a proposed zero-tolerance CI gate. The harness would
+#     have failed the build when the system CORRECTLY cited s.108, and the "fix" would have
+#     been teaching it to refuse questions the corpus answers.
+#   * Tier C ("conflict") listed "casual leave: both say 10" as a CONFLICT. That is an exact
+#     MATCH. s.117 is a statutory FLOOR ("shall be allowed... at the rate of"), so the
+#     handbook's 30 days EXCEEDS it and is compliant. Graded against that set, correct
+#     answers would have been penalised.
+#
+# gold_section is the anchor the harness asserts on -- NOT the page. The section number is
+# the statute's real primary key: stable regardless of pagination, and it OCRs cleanly where
+# footers do not ('ll' for 11, 'Az' for 47).
+
+meta:
+  n: 30
+  metrics: [recall@5, groundedness, abstention_2x2]
+  judge: gemini-2.5-flash   # cross-FAMILY, not cross-tier. See evals/harness.py.
+  note: >
+    n=30 -> 95% CI is roughly +/-10.7pp at a 90% score. Say so. An honest wide interval
+    beats a fake tight one, and n=30 is what hand-verification actually affords.
+
+questions:
+  # ---------------------------------------------------------------- TIER A: handbook only
+  - q: How many days of casual leave am I entitled to?
+    tier: A
+    expected_behavior: answer
+    gold_answer: 10 days
+    gold_doc: handbook
+    gold_printed_page: 6
+  - q: How many sick leave days does the company give?
+    tier: A
+    expected_behavior: answer
+    gold_answer: 14 days
+    gold_doc: handbook
+    gold_printed_page: 6
+  - q: How much annual leave do I get?
+    tier: A
+    expected_behavior: answer
+    gold_answer: 30 days after 12 months of service
+    gold_doc: handbook
+    gold_printed_page: 6
+  - q: Who is the Chairperson?
+    tier: A
+    expected_behavior: answer
+    gold_answer: Sultana Hashem
+    gold_doc: handbook
+    gold_printed_page: 1
+  - q: Where is the head office?
+    tier: A
+    expected_behavior: answer
+    gold_answer: Shanta Western Tower, Level 13, Bir Uttam Mir Shawkat Road, 186 Tejgaon I/A, Dhaka 1208
+    gold_doc: handbook
+    gold_printed_page: 5
+  - q: When was Partex founded and by whom?
+    tier: A
+    expected_behavior: answer
+    gold_answer: 1962, by M. A. Hashem
+    gold_doc: handbook
+    gold_printed_page: 2
+  - q: What are the office working hours?
+    tier: A
+    expected_behavior: answer
+    gold_answer: Sunday-Thursday 9:00-17:00; Saturday 9:00-13:30
+    gold_doc: handbook
+    gold_printed_page: 5
+  - q: What does the handbook say about confidentiality?
+    tier: A
+    expected_behavior: answer
+    gold_answer: Employees must not disclose company information; obligation continues after separation
+    gold_doc: handbook
+    gold_printed_page: 8
+
+  # ---------------------------------------------------------------- TIER B: statute only
+  - q: How much maternity leave does the law require?
+    tier: B
+    expected_behavior: answer
+    gold_answer: 16 weeks total -- 8 weeks before and 8 weeks after delivery
+    gold_doc: statute
+    gold_section: 46
+    gold_printed_page: 39
+  - q: How much overtime pay is required by law?
+    tier: B
+    expected_behavior: answer
+    gold_answer: Twice the ordinary rate of basic wage, dearness allowance and ad-hoc/interim pay
+    gold_doc: statute
+    gold_section: 108
+    gold_printed_page: 57
+  - q: How many festival holidays must an employer give?
+    tier: B
+    expected_behavior: answer
+    gold_answer: 11 days of paid festival holidays
+    gold_doc: statute
+    gold_section: 118
+    gold_printed_page: 60
+  - q: What is the maximum number of hours an adult worker can work in a day?
+    tier: B
+    expected_behavior: answer
+    # The trap that killed the agent argument: the 10-hour exception is in s.100's OWN
+    # sentence. It is not a multi-hop question and never was.
+    gold_answer: 8 hours ordinarily, extendable to 10 hours in any day
+    gold_doc: statute
+    gold_section: 100
+    gold_printed_page: 56
+  - q: What is the maximum weekly working time?
+    tier: B
+    expected_behavior: answer
+    gold_answer: 48 hours per week
+    gold_doc: statute
+    gold_section: 102
+    gold_printed_page: 57
+  - q: What procedure must an employer follow before dismissing a worker for misconduct?
+    tier: B
+    expected_behavior: answer
+    gold_answer: Written charge, at least 7 days to explain, a hearing, an enquiry, and approval
+    gold_doc: statute
+    gold_section: 24
+    gold_printed_page: 32
+  - q: Is there a minimum wage board?
+    tier: B
+    expected_behavior: answer
+    gold_answer: Yes -- the Minimum Wages Board is established under the Act
+    gold_doc: statute
+    gold_section: 138
+  - q: What does the law say about a grievance procedure?
+    tier: B
+    expected_behavior: answer
+    gold_answer: A worker may submit a grievance in writing; timelines and appeal to the Labour Court apply
+    gold_doc: statute
+    gold_section: 33
+
+  # ------------------------------------------- TIER C: floor comparison (NOT "conflict")
+  - q: Does our casual leave policy meet the legal minimum?
+    tier: C
+    expected_behavior: answer
+    gold_answer: Yes -- the handbook grants 10 days and s.115 requires ten. Exactly at the floor.
+    gold_doc: both
+    gold_section: 115
+  - q: Is our sick leave policy compliant?
+    tier: C
+    expected_behavior: answer
+    gold_answer: Yes -- 14 days against s.116(1)'s fourteen. Exactly at the floor.
+    gold_doc: both
+    gold_section: 116
+  - q: Our handbook gives 30 days annual leave but the Act says one day per 18 worked. Is that a problem?
+    tier: C
+    expected_behavior: answer
+    # THE floor-semantics test. A naive diff answers "30 != 18, MISMATCH" and is confidently
+    # wrong. The Act sets minima; exceeding one is compliance.
+    gold_answer: No -- 30 days EXCEEDS the statutory floor of roughly 15-20 days, so it is compliant
+    gold_doc: both
+    gold_section: 117
+  - q: Does our Employee Handbook comply with the Labour Act on maternity leave?
+    tier: C
+    expected_behavior: answer
+    gold_answer: GAP -- the handbook is silent on maternity; s.46 mandates 16 weeks
+    gold_doc: both
+    gold_section: 46
+  - q: We work Sun-Thu 9-5 and Sat 9:00-1:30. Is that legal?
+    tier: C
+    expected_behavior: answer
+    gold_answer: Compliant -- 44.5h is under s.102's 48h weekly cap and no day exceeds s.100's limit
+    gold_doc: both
+    gold_section: 102
+  - q: Does the handbook address overtime pay?
+    tier: C
+    expected_behavior: answer
+    gold_answer: GAP -- the handbook is silent on overtime; s.108 mandates twice the ordinary rate
+    gold_doc: both
+    gold_section: 108
+  - q: Our handbook says new joiners get leave only after probation. Is that lawful?
+    tier: C
+    expected_behavior: answer
+    # THE ONE REAL CONFLICT in this corpus, and the nuance that proves the statute was read:
+    # s.117 DOES require one year of continuous service, so annual leave during probation is
+    # fine. The carve-out only conflicts for CASUAL and SICK leave, where the Act says
+    # "every worker" with no probation qualifier.
+    gold_answer: >
+      Conflict for casual and sick leave -- ss.115/116 say "every worker" with no probation
+      qualifier. Annual leave is fine: s.117 itself requires one year of continuous service.
+    gold_doc: both
+    gold_section: 115
+  - q: Does the handbook's disciplinary process meet the law?
+    tier: C
+    expected_behavior: answer
+    gold_answer: >
+      CONFLICT -- the handbook allows action "as deemed appropriate by the management", while
+      s.24 requires a written charge, 7 days to explain, a hearing and an enquiry.
+    gold_doc: both
+    gold_section: 24
+
+  # ------------------------------------------------------------- TIER D: unanswerable
+  # The construction no other candidate will build, because no other candidate will notice
+  # the assets do not match the spec. The brief PROMISES a Sales Handbook, an FAQ and a
+  # Company Profile. They do not exist in the assets, so questions about them are PROVABLY
+  # unanswerable and corpus-grounded -- not invented.
+  - q: What commission rate does the Sales Handbook specify?
+    tier: D
+    expected_behavior: refuse
+    gold_answer: The Sales Handbook does not exist in the provided assets.
+  - q: What does the FAQ say about expense claims?
+    tier: D
+    expected_behavior: refuse
+    gold_answer: The FAQ does not exist in the provided assets.
+  - q: What are the company's revenue figures in the Company Profile?
+    tier: D
+    expected_behavior: refuse
+    gold_answer: The Company Profile does not exist in the provided assets.
+  # Grep-verified absences. Everything claimed absent from the Act was proved with a grep
+  # over our own OCR, and the grep is committed as the test (see evals/harness.py).
+  - q: What is the work from home policy?
+    tier: D
+    expected_behavior: refuse
+    gold_answer: Neither document addresses remote work.
+  - q: How many days of paternity leave do I get?
+    tier: D
+    expected_behavior: refuse
+    # THE adversarial case. It scores HIGHER on similarity than several answerable questions
+    # because it collides with the casual-leave chunk -- which is why abstention here is
+    # structural, in code, and never a threshold.
+    gold_answer: Neither document addresses paternity leave. The Act covers maternity at ss.45-46.
+  # REMOVED: "What pension scheme does the company offer?"
+  # My own grep audit failed it: "pension" appears 19x in the Act (s.163 masters and seamen,
+  # s.24, s.160). The claim "neither document addresses a pension scheme" is therefore NOT
+  # grep-provable, so it is not a safe Tier-D question -- exactly the contamination this file
+  # warns about at the top, committed by the person who wrote the warning. The audit caught
+  # it, which is the entire reason the audit runs before the metrics.
+  - q: What is the notice period for resignation in the Sales department?
+    tier: D
+    expected_behavior: refuse
+    # Safe by CONSTRUCTION, not by grep: the Sales Handbook the brief promises does not exist
+    # in the assets. Questions about documents that are absent cannot be answered by
+    # documents that are present.
+    gold_answer: The Sales Handbook does not exist in the provided assets.

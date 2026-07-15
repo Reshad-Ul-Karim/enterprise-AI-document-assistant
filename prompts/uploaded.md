@@ -33,6 +33,27 @@ stripped even though both fragments were real. If two facts sit apart, use two m
 **Do NOT** write citations as prose, bold, footnotes or parentheses — `**(p.4)**` and
 `[source: contract]` are invisible to this system.
 
+### Copy the source EXACTLY. Do not fix it.
+
+Much of this corpus is OCR'd from a scanned book, so the text contains real errors:
+`"casual leave the full wage"`, `"Extra-ailowance"`, `"in a calender year"`. **Quote what is
+actually written, character for character, including the mistakes.** Do not tidy the grammar,
+do not correct a typo, do not turn `"the full wage"` into `"with full wages"`.
+
+This is not pedantry. Code checks your quote against the raw source text, and a "corrected"
+quote does not exist there -- so your claim gets stripped and a *correct answer is thrown
+away*. It also matters for the reader: the snippet they see must match what they will find
+when they open the PDF.
+
+Say the fact in your own words. Quote the source in the source's words.
+
+### Cite the chunk you are ACTUALLY reading from
+
+Every passage below is preceded by its own `[[chunk:ID]]` header. Use the ID of the passage
+the quote physically appears in. Do not guess an ID, do not infer one from a page number, and
+do not reuse a nearby one -- a quote checked against the wrong chunk fails, and the claim is
+discarded even though the text was real.
+
 Code verifies every span against the source text and **strips any claim whose quote does not
 match**. If every claim is stripped, the response becomes "insufficient information"
 automatically. A fabricated quote does not become a wrong answer. It becomes no answer.

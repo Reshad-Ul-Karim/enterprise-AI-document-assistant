@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Enterprise AI Document Assistant</title>
+<link rel="icon" type="image/png" href="/static/logo.png">
 <style>
   :root {
     --bg:#fbfbfa; --panel:#fff; --ink:#1a1a18; --muted:#6b6b66; --line:#e6e5e1;
@@ -22,6 +23,13 @@
     font:16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif; }
   .wrap { max-width:900px; margin:0 auto; padding:28px 20px 80px; }
   header { border-bottom:1px solid var(--line); padding-bottom:16px; margin-bottom:18px; }
+  /* 192px source rendered at 44 CSS px = 2x for retina. The original was 1536x1024 and
+     2.3 MB -- larger than the entire app -- which on a 512 MB free tier is bytes the
+     reviewer waits for and never sees. Cropped to the icon and resized: 2.3 MB -> 53 KB.
+     width/height are set in the MARKUP as well as CSS so the header does not reflow when
+     the image lands. */
+  .brand { display:flex; align-items:center; gap:13px; }
+  .logo { border-radius:10px; flex:none; display:block; }
   h1 { font-size:21px; margin:0 0 4px; letter-spacing:-.01em; }
   .sub { color:var(--muted); font-size:14px; margin:0; }
 
@@ -130,8 +138,13 @@
 <body>
 <div class="wrap">
   <header>
-    <h1>Enterprise AI Document Assistant</h1>
-    <p class="sub">Ask questions, get answers with the source page and a verbatim quote — or an honest "not found".</p>
+    <div class="brand">
+      <img src="/static/logo.png" alt="" width="44" height="44" class="logo">
+      <div>
+        <h1>Enterprise AI Document Assistant</h1>
+        <p class="sub">Ask questions, get answers with the source page and a verbatim quote — or an honest "not found".</p>
+      </div>
+    </div>
   </header>
 
   <div class="tabs">

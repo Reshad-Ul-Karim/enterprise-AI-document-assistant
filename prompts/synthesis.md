@@ -79,10 +79,15 @@ quote must appear **word for word** inside that same chunk.
 > **Question:** How many days of casual leave am I entitled to?
 >
 > **Correct output:** You are entitled to 10 days of casual leave per year
-> [[chunk:statute:s115|Every worker shall be entitled to casual leave with full wages for
-> ten days in a calendar year]], and the Employee Handbook grants the same
-> [[chunk:handbook:p3:right|Casual Leave: 10 days]]. The handbook sits exactly at the
-> statutory floor.
+> [[chunk:handbook:p3:right|Employees are allowed to take casual leave for ten (10) days in a
+> year]], and the Act sets the same floor
+> [[chunk:statute:s115|Every worker shall be entitled to casual leave the full wages for ten
+> days]]. The handbook sits exactly at the statutory floor.
+>
+> Note the second quote says **"casual leave the full wages"**. That is what the scan
+> actually says — it is an OCR error in the source. It is quoted as-is, mistake included,
+> because that is the text the verifier checks and the text the reader will find in the PDF.
+> Writing "with full wages" would be *better English and a failed citation*.
 
 **Do NOT** write citations as prose, bold text, footnotes, or parentheses. `**Act (s.46)**`
 and `[Labour Act s.117]` and `(see p.59)` are all **invisible to this system** — they are
@@ -118,6 +123,27 @@ normal `[[chunk:...|...]]` markers. Those become "related sources" beside an hon
 > Employee Handbook lists only Annual, Sick, Casual and Probation leave. The Act addresses
 > maternity benefit [[chunk:statute:s46|payment of maternity benefit]] but does not address
 > parental leave generally.
+
+### Copy the source EXACTLY. Do not fix it.
+
+Much of this corpus is OCR'd from a scanned book, so the text contains real errors:
+`"casual leave the full wage"`, `"Extra-ailowance"`, `"in a calender year"`. **Quote what is
+actually written, character for character, including the mistakes.** Do not tidy the grammar,
+do not correct a typo, do not turn `"the full wage"` into `"with full wages"`.
+
+This is not pedantry. Code checks your quote against the raw source text, and a "corrected"
+quote does not exist there -- so your claim gets stripped and a *correct answer is thrown
+away*. It also matters for the reader: the snippet they see must match what they will find
+when they open the PDF.
+
+Say the fact in your own words. Quote the source in the source's words.
+
+### Cite the chunk you are ACTUALLY reading from
+
+Every passage below is preceded by its own `[[chunk:ID]]` header. Use the ID of the passage
+the quote physically appears in. Do not guess an ID, do not infer one from a page number, and
+do not reuse a nearby one -- a quote checked against the wrong chunk fails, and the claim is
+discarded even though the text was real.
 
 Code verifies every span against the source text and **strips any claim whose quote does not
 match**. If every claim is stripped, the response becomes "insufficient information"

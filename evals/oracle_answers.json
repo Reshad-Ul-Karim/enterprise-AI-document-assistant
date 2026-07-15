@@ -1,0 +1,34 @@
+{
+  "n": 3,
+  "results": [
+    {
+      "q": "How much maternity leave does the law require?",
+      "tier": "B",
+      "expected": "answer",
+      "insufficient": false,
+      "citations": 1,
+      "sections": [
+        46
+      ],
+      "answer": "**Against the Bangladesh Labour Act 2006 as published in the provided 2009 BEF handbook \u2014 amendments after 2006 are not in this corpus \u2014**\n\nThe **statutory minimum** for maternity benefit is **16 weeks of paid leave**, structured as **8 weeks before the expected delivery date and 8 weeks after the actual delivery date**.\n\nThe Act states this explicitly in **s.46(1)**:\n> *\"Every woman employed in a"
+    },
+    {
+      "q": "How much overtime pay is required by law?",
+      "tier": "B",
+      "expected": "answer",
+      "insufficient": true,
+      "citations": 0,
+      "sections": [],
+      "answer": "Against the **Bangladesh Labour Act 2006 as published in the provided 2009 BEF handbook**\u2014amendments after 2006 are not in this corpus\u2014the Employee Handbook is **COMPLIANT** with the statutory floor on overtime pay."
+    },
+    {
+      "q": "How many festival holidays must an employer give?",
+      "tier": "B",
+      "expected": "answer",
+      "insufficient": true,
+      "citations": 0,
+      "sections": [],
+      "answer": ""
+    }
+  ]
+}

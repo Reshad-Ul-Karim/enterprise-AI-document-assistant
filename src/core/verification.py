@@ -75,36 +75,103 @@ def _strip_wrapping_quotes(quote: str) -> str:
     return text
 
 
-def _span_pattern(quote: str) -> re.Pattern[str]:
-    """A pattern matching the quote in ORIGINAL text with any whitespace between tokens.
+_WORD_RE = re.compile(r"\S+")
 
-    The statute is OCR'd from a scan, so line wrapping means a true quote almost never
-    matches byte-for-byte. Matching token-wise against flexible whitespace is what lets us
-    slice the real span out of the real text.
+# Fuzzy tolerance, and the exact reason for it. MEASURED: asked for the festival-holiday
+# entitlement, the model quoted
+#     "Every worker shall be allowed in a calendar year eleven days of paid festival holidays"
+# and the source -- an OCR of a printed statute -- says "calender year". The typo is the
+# DOCUMENT'S; the model silently corrected it while quoting, which is what a careful writer
+# does. Exact matching then refused a correct answer. On a corpus that is 97% OCR'd, that is
+# systemic, not a one-off: byte-exactness punishes the model for the scan's errors.
+#
+# So one character of drift is allowed per LONG word, and short tokens must match EXACTLY.
+# That is deliberately tight enough to keep the guarantee intact:
+#     calender -> calendar   distance 1, len 8   ALLOWED  (an OCR/print typo)
+#     eleven   -> seven      distance 3          REJECTED (a different quantity)
+#     ten      -> two        len 3, exact only   REJECTED (a different quantity)
+#     14       -> 4          len < 4, exact only REJECTED
+# The numbers -- which is what these answers turn on -- cannot drift.
+_MAX_EDITS = 1
+_FUZZY_MIN_LEN = 4
 
-    Note what is deliberately NOT tolerated: an ellipsis. `"the employer... may... fix"` is
-    the model splicing two distant fragments into one quote, which is exactly the fabrication
-    the span check exists to catch. Tolerating punctuation the model wrapped AROUND a real
-    span is correct; tolerating a span that was never contiguous is not.
+
+def _within_one_edit(a: str, b: str) -> bool:
+    """Levenshtein <= 1, short-circuited. Hand-rolled to avoid a dependency for ~15 lines."""
+    if a == b:
+        return True
+    la, lb = len(a), len(b)
+    if abs(la - lb) > _MAX_EDITS:
+        return False
+    i = j = edits = 0
+    while i < la and j < lb:
+        if a[i] == b[j]:
+            i += 1
+            j += 1
+            continue
+        edits += 1
+        if edits > _MAX_EDITS:
+            return False
+        if la > lb:
+            i += 1
+        elif lb > la:
+            j += 1
+        else:
+            i += 1
+            j += 1
+    return edits + (la - i) + (lb - j) <= _MAX_EDITS
+
+
+def _token_matches(quote_token: str, source_token: str) -> bool:
+    if quote_token == source_token:
+        return True
+    # Short tokens carry the numbers and the negations. They must be exact.
+    if len(quote_token) < _FUZZY_MIN_LEN or len(source_token) < _FUZZY_MIN_LEN:
+        return False
+    if any(ch.isdigit() for ch in quote_token) or any(ch.isdigit() for ch in source_token):
+        return False  # never fuzz a figure
+    return _within_one_edit(quote_token, source_token)
+
+
+def find_span(quote: str, text: str) -> tuple[int, int] | None:
+    """Locate the quote in `text`, tolerating OCR-level noise. Returns (start, end) or None.
+
+    Token-wise with a sliding window rather than a regex, because the tolerance is per-token
+    and a regex cannot express "this word, or one character away from it".
+
+    What is still NOT tolerated -- and must not be: an ellipsis or any reordering.
+    `"the employer... may... fix"` is the model splicing distant fragments into one quote,
+    which is the fabrication this check exists to catch. Forgiving the scan's typos is not
+    the same as forgiving invention.
     """
-    tokens = _canonical(_strip_wrapping_quotes(quote)).split()
-    if not tokens:
-        return re.compile(r"(?!)")  # matches nothing
-    return re.compile(r"\s+".join(re.escape(t) for t in tokens), re.I)
+    q = _canonical(_strip_wrapping_quotes(quote)).split()
+    if not q:
+        return None
+    spans = [(m.group(0).lower().strip(".,;:()[]\"'"), m.start(), m.end())
+             for m in _WORD_RE.finditer(unicodedata.normalize("NFKC", text))]
+    if len(spans) < len(q):
+        return None
+    for i in range(len(spans) - len(q) + 1):
+        if all(_token_matches(q[k], spans[i + k][0]) for k in range(len(q))):
+            return spans[i][1], spans[i + len(q) - 1][2]
+    return None
 
 
 def verify_span(quote: str, chunk: Chunk) -> bool:
     """Does the quoted span actually appear in the chunk it cites?"""
-    if not _canonical(_strip_wrapping_quotes(quote)):
-        return False
-    return _span_pattern(quote).search(chunk.text) is not None
+    return find_span(quote, chunk.text) is not None
 
 
 def slice_snippet(chunk: Chunk, quote: str) -> str:
-    """Slice the verbatim span out of the chunk. THIS is the anti-hallucination guarantee:
-    the snippet the reviewer reads is source text, not model output."""
-    match = _span_pattern(quote).search(chunk.text)
-    return match.group(0) if match else quote.strip()
+    """Slice the span out of the chunk. THIS is the anti-hallucination guarantee: the snippet
+    the reviewer reads is SOURCE text, not model output.
+
+    It matters that this returns the source's version rather than the model's. When the model
+    tidied "calender year" to "calendar year", the reviewer sees what the document actually
+    says -- typo and all -- because that is what they would find if they opened the PDF.
+    """
+    found = find_span(quote, chunk.text)
+    return chunk.text[found[0]:found[1]] if found else quote.strip()
 
 
 def build_citation(chunk: Chunk, quote: str) -> Citation:
