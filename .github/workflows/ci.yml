@@ -48,6 +48,32 @@ jobs:
           done
           echo "runtime closure is clean"
 
+      - name: the app must BOOT in the real image closure
+        # THE check that would have caught the failed build. requirements.txt and the
+        # Dockerfile are two places a dependency lives, and the local test suite runs neither.
+        # fastembed was removed from the manifest while the Dockerfile kept
+        # `RUN python -c "from fastembed import ..."` to pre-bake the model -- the image tried
+        # to import a package that was no longer installed and the build exited 1, minutes
+        # later, in a log. This imports the app exactly as uvicorn does, in exactly the
+        # closure the image will have.
+        run: python -c "import src.api.main; print('app imports in the runtime closure')"
+
+      - name: every build-time import in the Dockerfile must be installable
+        run: |
+          python - <<'PY'
+          import re, pathlib
+          df = pathlib.Path("Dockerfile").read_text()
+          for line in df.splitlines():
+              if line.strip().startswith("RUN python -c"):
+                  print("build-time import line:", line.strip()[:90])
+          PY
+          # Actually run them, in this closure. If a RUN line cannot import, the build cannot either.
+          grep -E '^RUN python -c' Dockerfile | sed -E 's/^RUN //' | while read -r cmd; do
+            echo "  executing: $cmd"
+            eval "$cmd" || { echo "::error::Dockerfile build step fails in the runtime closure"; exit 1; }
+          done
+          echo "all Dockerfile build-time imports succeed"
+
       - name: prove the upload path imports cleanly in the real image environment
         # This is the check that matters. langchain_text_splitters' __init__ reaches for
         # transformers when importable; on a box that also has tensorflow/pyarrow it aborts

@@ -44,8 +44,14 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Bake the embedding model into the image.
-RUN python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='BAAI/bge-small-en-v1.5')"
+# NOTHING TO BAKE. There used to be a step here pre-downloading the bge-small ONNX model so
+# it would not be fetched on every cold start. Embeddings are Pinecone Inference now, so
+# there is no local model, no cache directory, and no CDN dependency at boot.
+#
+# This line is why the previous build failed: fastembed was removed from requirements.txt and
+# this `RUN python -c "from fastembed import ..."` was left behind, so the image tried to
+# import a package that was no longer installed. Deleting a dependency means grepping for it,
+# not just editing the manifest -- and the Dockerfile is code the local test suite never runs.
 
 COPY index/ ./index/
 COPY prompts/ ./prompts/

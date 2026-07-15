@@ -196,3 +196,34 @@ def test_index_and_runtime_agree_on_the_embedding_model():
     meta = json.loads((REPO / "index" / "index_meta.json").read_text())
     assert meta["embed_model_id"] == EMBED_MODEL_ID
     assert meta["embed_dim"] == EMBED_DIM
+
+
+def test_the_dockerfile_only_uses_packages_that_are_installed():
+    """The Dockerfile is code that the test suite never executes, so a stale line in it fails
+    in the BUILD -- minutes later, in a log, after a push.
+
+    This exact thing happened: fastembed was removed from requirements.txt and the Dockerfile
+    kept `RUN python -c "from fastembed import TextEmbedding..."` to pre-bake the model. The
+    image tried to import a package that was no longer installed and the build exited 1.
+    Deleting a dependency means grepping for it, not just editing the manifest.
+    """
+    dockerfile = (REPO / "Dockerfile").read_text()
+    installed = {
+        re.split(r"[=<>\[]", line.split("#")[0].strip().lower())[0].strip()
+        for line in (REPO / "requirements.txt").read_text().splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    }
+
+    # RUN python -c "..." lines are the risk: they import things at build time.
+    for line in dockerfile.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("RUN python -c"):
+            continue
+        for module in re.findall(r"from (\w+) import|import (\w+)", stripped):
+            name = (module[0] or module[1]).lower()
+            if name in ("os", "sys", "urllib", "json", "importlib"):
+                continue  # stdlib
+            assert name in installed, (
+                f"Dockerfile runs `import {name}` at build time but {name!r} is not in "
+                "requirements.txt. The build will exit 1."
+            )
