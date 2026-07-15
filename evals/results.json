@@ -1,12 +1,13 @@
 {
   "retrieval": {
     "n": 16,
-    "recall_at_5": 0.875,
+    "recall_at_5": 0.812,
     "misses": [
       {
         "q": "We work Sun-Thu 9-5 and Sat 9:00-1:30. Is that legal?",
         "gold": 102,
         "got": [
+          12,
           41,
           109,
           113
@@ -16,9 +17,16 @@
         "q": "Our handbook says new joiners get leave only after probation. Is that lawful?",
         "gold": 115,
         "got": [
-          4,
           10,
-          23
+          116
+        ]
+      },
+      {
+        "q": "Does the handbook's disciplinary process meet the law?",
+        "gold": 24,
+        "got": [
+          23,
+          207
         ]
       }
     ]
@@ -31,12 +39,12 @@
     "commission rate": 0
   },
   "abstention": {
-    "tp": 6,
-    "fp": 8,
-    "tn": 14,
+    "tp": 4,
+    "fp": 2,
+    "tn": 6,
     "fn": 0,
-    "refusal_precision": 0.429,
-    "false_refusal_rate": 0.364
+    "refusal_precision": 0.667,
+    "false_refusal_rate": 0.25
   },
   "rows": [
     {
@@ -45,7 +53,7 @@
       "expected": "answer",
       "refused": false,
       "citations": 1,
-      "answer": "You are entitled to **10 days of casual leave per year**.\n\nThe Employee Handbook states:\n\nThe Bangladesh Labour Act 2006 sets the same statutory minimum:\n\nThe handbook sits **exactly at the statutory floor** \u2192 **COMPLIANT**."
+      "answer": "You are entitled to **10 days of casual leave per year**.\n\nThe Employee Handbook states:\n\nThe Bangladesh Labour Act 2006 sets the same statutory minimum:\n\nThe handbook sits exactly at the statutory floor \u2192 **COMPLIANT**."
     },
     {
       "q": "How many sick leave days does the company give?",
@@ -53,7 +61,7 @@
       "expected": "answer",
       "refused": false,
       "citations": 1,
-      "answer": "The Bangladesh Labour Act 2006 sets the same statutory floor: **14 days of sick leave with full wages** .\n\nThe handbook sits exactly at the statutory minimum \u2192 **COMPLIANT**."
+      "answer": "Against the **Bangladesh Labour Act 2006 as published in the provided 2009 BEF handbook** (amendments after 2006 are not in this corpus), this matches the statutory floor set in s.116(1) . The handbook sits exactly at the minimum \u2192 **COMPLIANT**."
     },
     {
       "q": "How much annual leave do I get?",
@@ -61,7 +69,7 @@
       "expected": "answer",
       "refused": true,
       "citations": 0,
-      "answer": "Against the **Bangladesh Labour Act 2006** as published in the provided 2009 BEF handbook \u2014 amendments after 2006 are not in this corpus \u2014 the **Employee Handbook is COMPLIANT** on annual leave.\n\n- The Act (s.117) sets a **statutory floor of 1 day for every 18 days worked** (~15\u201320 days). 30 days **"
+      "answer": "You are entitled to **30 days of annual leave with full salary** after completing 12 months of continuous service.\n\nThe Employee Handbook states:\n\nAgainst the **Bangladesh Labour Act 2006** as published in the provided 2009 BEF handbook \u2014 amendments after 2006 are not in this corpus \u2014 this exceeds t"
     },
     {
       "q": "Who is the Chairperson?",
@@ -72,36 +80,28 @@
       "answer": "The Chairperson of Partex Star Group is Sultana Hashem."
     },
     {
-      "q": "Where is the head office?",
-      "tier": "A",
-      "expected": "answer",
-      "refused": true,
-      "citations": 0,
-      "answer": "The head office of Partex Star Group is located at:\n\n**Shanta Western Tower, Level \u2013 13, Bir Uttam Mir Shawkat Road, 186 Tejgaon Industrial Area, Dhaka \u2013 1208, Bangladesh**"
-    },
-    {
-      "q": "When was Partex founded and by whom?",
-      "tier": "A",
-      "expected": "answer",
-      "refused": true,
-      "citations": 0,
-      "answer": "Partex Star Group was founded in **1962** by **Mr. M. A. Hashem**, the then founder Chairman of the Partex Group."
-    },
-    {
       "q": "What are the office working hours?",
       "tier": "A",
       "expected": "answer",
-      "refused": true,
-      "citations": 0,
-      "answer": "The office working hours for Partex Star Group (PSG) are as follows:\n\n- **Sunday to Thursday:** 9:00 a.m. to 5:00 p.m.\n- **Saturday:** 9:00 a.m. to 1:30 p.m.\n\nThis is stated in the Employee Handbook:"
+      "refused": false,
+      "citations": 2,
+      "answer": "The office working hours for Partex Star Group are from **Sunday to Thursday, 9:00 a.m. to 5:00 p.m., and on Saturday, 9:00 a.m. to 1:30 p.m.**\n\nThe Bangladesh Labour Act 2006 does not specify standard office working hours for general employees (it sets limits for *maximum* working hours, e.g., and "
     },
     {
       "q": "What does the handbook say about confidentiality?",
       "tier": "A",
       "expected": "answer",
       "refused": false,
-      "citations": 6,
-      "answer": "The Employee Handbook addresses confidentiality in two sections:\n\n1. **General Confidentiality Obligations**\n The handbook states that employees must maintain the confidentiality of the business and avoid disclosing sensitive or confidential information. Specifically:\n - *\"Employees of all departmen"
+      "citations": 2,
+      "answer": "The Employee Handbook addresses confidentiality in two places:\n\n1. **General confidentiality of business information**\n \n\n2. **Digital confidentiality (passwords, email, web use)**"
+    },
+    {
+      "q": "How much maternity leave does the law require?",
+      "tier": "B",
+      "expected": "answer",
+      "refused": false,
+      "citations": 2,
+      "answer": "Against the **Bangladesh Labour Act 2006** as published in the provided 2009 BEF handbook \u2014 amendments after 2006 are not in this corpus \u2014 the Act requires:\n\n**16 weeks (112 days) of maternity leave with full wages** for a woman who has worked for the employer for at least six months immediately pre"
     },
     {
       "q": "How much overtime pay is required by law?",
@@ -109,111 +109,7 @@
       "expected": "answer",
       "refused": true,
       "citations": 0,
-      "answer": "Against the **Bangladesh Labour Act 2006 as published in the provided 2009 BEF handbook** \u2014 amendments after 2006 are not in this corpus \u2014 the Act requires overtime pay at twice the ordinary rate of basic wage, dearness allowance, and ad-hoc or interim pay (if any):\n\nThe **Employee Handbook does not"
-    },
-    {
-      "q": "How many festival holidays must an employer give?",
-      "tier": "B",
-      "expected": "answer",
-      "refused": false,
-      "citations": 1,
-      "answer": "Against the **Bangladesh Labour Act 2006** as published in the provided 2009 BEF handbook \u2014 amendments after 2006 are not in this corpus \u2014 the Act requires employers to grant **eleven days of paid festival holidays** in a calendar year.\n\n."
-    },
-    {
-      "q": "What is the maximum number of hours an adult worker can work in a day?",
-      "tier": "B",
-      "expected": "answer",
-      "refused": true,
-      "citations": 0,
-      "answer": "Against the **Bangladesh Labour Act 2006** as published in the provided 2009 BEF handbook \u2014 amendments after 2006 are not in this corpus \u2014 the statutory maximum for an adult worker in a day is **10 hours**, including overtime.\n\nThe Act states:\n\nThe **Employee Handbook** does not address daily workin"
-    },
-    {
-      "q": "What is the maximum weekly working time?",
-      "tier": "B",
-      "expected": "answer",
-      "refused": false,
-      "citations": 2,
-      "answer": "Against the **Bangladesh Labour Act 2006** as published in the provided 2009 BEF handbook \u2014 amendments after 2006 are not in this corpus \u2014 the **statutory maximum weekly working time** for an adult worker is **60 hours in any week**, with an annual average not exceeding 56 hours per week.\n\n- It perm"
-    },
-    {
-      "q": "What procedure must an employer follow before dismissing a worker for misconduct?",
-      "tier": "B",
-      "expected": "answer",
-      "refused": false,
-      "citations": 5,
-      "answer": "Against the **Bangladesh Labour Act 2006** as published in the provided 2009 BEF handbook \u2014 amendments after 2006 are not in this corpus \u2014 the **Employee Handbook is silent** on the procedure for dismissing a worker for misconduct. The Act sets out a mandatory procedure in **s.24**, which the handbo"
-    },
-    {
-      "q": "Is there a minimum wage board?",
-      "tier": "B",
-      "expected": "answer",
-      "refused": false,
-      "citations": 1,
-      "answer": "Against the **Bangladesh Labour Act 2006 as published in the provided 2009 BEF handbook** (amendments after 2006 are not in this corpus), the Act **establishes a Minimum Wages Board**:\n\n.\n\nThe **Employee Handbook does not address minimum wage or the Minimum Wages Board**, so it is silent on this sta"
-    },
-    {
-      "q": "What does the law say about a grievance procedure?",
-      "tier": "B",
-      "expected": "answer",
-      "refused": true,
-      "citations": 0,
-      "answer": "Against the **Bangladesh Labour Act 2006** as published in the provided 2009 BEF handbook \u2014 amendments after 2006 are not in this corpus \u2014 the Act sets out a statutory grievance procedure in **s.33** (printed p.35):\n\n1. **Submission**\n A worker who has a grievance on any matter covered by Chapter V "
-    },
-    {
-      "q": "Does our casual leave policy meet the legal minimum?",
-      "tier": "C",
-      "expected": "answer",
-      "refused": false,
-      "citations": 1,
-      "answer": "Against the **Bangladesh Labour Act 2006** as published in the provided 2009 BEF handbook \u2014 amendments after 2006 are not in this corpus \u2014 the **Employee Handbook is COMPLIANT** with the statutory minimum for casual leave.\n\n- The Act sets the **same floor** .\n\nThe handbook sits **exactly at the stat"
-    },
-    {
-      "q": "Our handbook gives 30 days annual leave but the Act says one day per 18 worked. Is that a problem?",
-      "tier": "C",
-      "expected": "answer",
-      "refused": false,
-      "citations": 1,
-      "answer": "Against the **Bangladesh Labour Act 2006 as published in the provided 2009 BEF handbook** \u2014 amendments after 2006 are not in this corpus \u2014 the Employee Handbook is **COMPLIANT** on annual leave.\n\nThe Act sets a **statutory minimum** of one day of annual leave for every eighteen days worked\n.\nThe han"
-    },
-    {
-      "q": "Does our Employee Handbook comply with the Labour Act on maternity leave?",
-      "tier": "C",
-      "expected": "answer",
-      "refused": false,
-      "citations": 2,
-      "answer": "Against the **Bangladesh Labour Act 2006 as published in the provided 2009 BEF handbook** \u2014 amendments after 2006 are not in this corpus \u2014 the **Employee Handbook does not address maternity leave or maternity benefit at all**, which creates a **GAP** against the statutory entitlements the Act mandat"
-    },
-    {
-      "q": "We work Sun-Thu 9-5 and Sat 9:00-1:30. Is that legal?",
-      "tier": "C",
-      "expected": "answer",
-      "refused": false,
-      "citations": 2,
-      "answer": "Against the **Bangladesh Labour Act 2006** as published in the provided 2009 BEF handbook \u2014 amendments after 2006 are not in this corpus \u2014 the **Employee Handbook\u2019s working hours are COMPLIANT** with the statutory minima for adult workers.\n\n1. **Daily hours**\n The Act (s.100) sets a **floor of 8 hou"
-    },
-    {
-      "q": "Does the handbook address overtime pay?",
-      "tier": "C",
-      "expected": "answer",
-      "refused": true,
-      "citations": 0,
-      "answer": "Against the **Bangladesh Labour Act 2006** as published in the provided 2009 BEF handbook \u2014 amendments after 2006 are not in this corpus \u2014 the **Employee Handbook does not address overtime pay**, which the Act mandates in **s.108 (printed p.57)**:\n\nThe handbook is **silent** on overtime pay, overtim"
-    },
-    {
-      "q": "Our handbook says new joiners get leave only after probation. Is that lawful?",
-      "tier": "C",
-      "expected": "answer",
-      "refused": false,
-      "citations": 1,
-      "answer": "Against the **Bangladesh Labour Act 2006** as published in the provided 2009 BEF handbook \u2014 amendments after 2006 are not in this corpus \u2014 the Employee Handbook\u2019s rule on leave during probation **creates a CONFLICT** with the statutory floor.\n\nThe Act **explicitly entitles every worker to earn annua"
-    },
-    {
-      "q": "Does the handbook's disciplinary process meet the law?",
-      "tier": "C",
-      "expected": "answer",
-      "refused": false,
-      "citations": 2,
-      "answer": "Against the **Bangladesh Labour Act 2006 as published in the provided 2009 BEF handbook** \u2014 amendments after 2006 are not in this corpus \u2014 the **Employee Handbook does not appear to address the statutory disciplinary process**, which creates a **GAP** in compliance.\n\n### Key statutory requirements ("
+      "answer": "Against the **Bangladesh Labour Act 2006** as published in the provided 2009 BEF handbook \u2014 amendments after 2006 are not in this corpus \u2014 the Act requires overtime pay at twice the ordinary rate of basic wage, dearness allowance, and ad-hoc or interim pay (if any):\n\nThe **Employee Handbook** does n"
     },
     {
       "q": "What commission rate does the Sales Handbook specify?",
@@ -221,47 +117,31 @@
       "expected": "refuse",
       "refused": true,
       "citations": 2,
-      "answer": "The provided documents do not address commission rates. \n\nThe **Employee Handbook** covers leave policies, working hours, benefits, and conduct, but does **not** mention sales commissions, incentive structures, or variable pay. The **Bangladesh Labour Act 2006** (in the retrieved sections) also does"
+      "answer": "The provided documents do not address any commission rate for sales employees. \n\nThe **Employee Handbook** covers leave policies, working hours, conduct, and benefits, but does **not** mention sales commissions, incentive structures, or variable pay. The **Bangladesh Labour Act 2006** (in the retrie"
     },
     {
       "q": "What does the FAQ say about expense claims?",
       "tier": "D",
       "expected": "refuse",
       "refused": true,
-      "citations": 1,
-      "answer": "The provided documents do **not** address expense claims. \n\nThe **Employee Handbook** covers travel procedures (Section C) but does **not** mention expense claims, reimbursement processes, or submission requirements. The **Bangladesh Labour Act 2006** (retrieved sections) does not address expense cl"
+      "citations": 2,
+      "answer": "The provided documents do **not** address expense claims. \n\nThe **Employee Handbook** covers travel procedures (Section C, ) but does not mention expense claims, reimbursement processes, or submission requirements. The **Bangladesh Labour Act 2006** does not address expense claims either. The closes"
     },
     {
       "q": "What are the company's revenue figures in the Company Profile?",
       "tier": "D",
       "expected": "refuse",
       "refused": true,
-      "citations": 1,
-      "answer": "The provided documents do **not** include the company's revenue figures. \n\nThe **Employee Handbook** contains a **Company Profile** section (pp. 2\u20134) that describes Partex Star Group's history, vision, mission, values, and business domains (e.g., consumer durables, food and beverage), but it does **"
+      "citations": 0,
+      "answer": "The provided documents do not address the company's revenue figures. \n\nThe **Employee Handbook** includes a company profile covering its history, vision, mission, values, locations, and business domains (e.g., consumer durables, food and beverage), but it does **not** disclose financial details such"
     },
     {
       "q": "What is the work from home policy?",
       "tier": "D",
       "expected": "refuse",
       "refused": true,
-      "citations": 1,
-      "answer": "The provided documents do not address a work from home policy. \n\nThe **Employee Handbook** covers working days and hours, attendance, and leave policies but does not mention remote work or work from home arrangements. The **Bangladesh Labour Act 2006** (in the provided sections) also does not addres"
-    },
-    {
-      "q": "How many days of paternity leave do I get?",
-      "tier": "D",
-      "expected": "refuse",
-      "refused": true,
-      "citations": 1,
-      "answer": "The provided documents do **not** address paternity leave. \n\nThe **Employee Handbook** lists only Annual, Sick, Casual, and Probation leave. The **Bangladesh Labour Act 2006** (as published in the 2009 BEF handbook) addresses maternity benefit but does **not** mention paternity leave."
-    },
-    {
-      "q": "What is the notice period for resignation in the Sales department?",
-      "tier": "D",
-      "expected": "refuse",
-      "refused": true,
-      "citations": 3,
-      "answer": "The provided documents do **not** address the notice period for resignation in the Sales department or any other department. \n\nThe **Employee Handbook** outlines separation of employment (Section G) but does **not** specify notice periods for resignation. The **Bangladesh Labour Act 2006** addresses"
+      "citations": 0,
+      "answer": "The provided documents do **not** address a work from home policy. \n\n**Related context from the Employee Handbook:**\n\nThe Bangladesh Labour Act 2006 does not mention work from home."
     }
   ]
 }

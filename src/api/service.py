@@ -81,6 +81,16 @@ class Corpus:
             raise RuntimeError(f"index shape {vectors.shape} vs {len(self.chunks)} chunks")
 
     @property
+    def pinned_token_estimate(self) -> int:
+        """The handbook is pinned into EVERY prompt, so it is a fixed floor on the token cost
+        of any question. Computed once at boot rather than per request."""
+        if not hasattr(self, "_pinned_est"):
+            from src.api.rategate import estimate_tokens
+
+            self._pinned_est = estimate_tokens("".join(c.text for c in self.handbook))
+        return self._pinned_est
+
+    @property
     def handbook_text(self) -> str:
         return "\n\n".join(f"[[chunk:{c.chunk_id}]] (printed p.{c.printed_page})\n{c.text}" for c in self.handbook)
 

@@ -19,7 +19,7 @@ from src.api.errors import AppError, GenerationUnconfigured, IndexNotLoaded, app
 from src.api.uploads import KbNotFound
 from src.api.kbstore import KbRegistry
 from src.api.memguard import MEMORY_LIMIT_MB, current_rss_mb
-from src.api.rategate import RateGate
+from src.api.rategate import RateGate, estimate_tokens
 from src.api.routes_kb import router as kb_router
 from src.api.settings import settings
 from src.core.generator import Generator
@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
     restored = app.state.registry.rehydrate()
     if restored:
         _log("kbs_rehydrated", count=restored)
-    state["gate"] = RateGate(settings.max_concurrent_requests, settings.requests_per_second)
+    state["gate"] = RateGate(settings.max_concurrent_requests, settings.tokens_per_minute)
     if settings.generation_available:
         from src.api.providers.mistral import MistralGenerator
 
@@ -171,7 +171,13 @@ async def ask(request: AskRequest, http_request: Request) -> AskResponse:
     # I wrote this exact diagnosis in create_kb's docstring and fixed it there, without
     # checking whether the same pattern existed anywhere else. It did, on the busiest route
     # in the app.
-    async with state["gate"]:  # type: ignore[misc]
+    # Reserve the request's TOKEN cost before sending it, because that is the unit the free
+    # tier actually meters. Estimated from the assembled context: the pinned handbook plus
+    # the retrieved sections, which is ~5k tokens for a typical ask and much more for a
+    # compare. A big question costs more budget than a small one -- which is the whole point,
+    # and precisely what metering requests could not express.
+    prompt_tokens = estimate_tokens(request.question) + corpus.pinned_token_estimate + 1500
+    async with state["gate"].reserve(prompt_tokens):  # type: ignore[union-attr]
         response = await run_in_threadpool(
             answer,
             request.question,

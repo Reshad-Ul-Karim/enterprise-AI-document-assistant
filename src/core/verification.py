@@ -191,6 +191,90 @@ def build_citation(chunk: Chunk, quote: str) -> Citation:
     )
 
 
+# ONLY real headings: a markdown '#' line, or a line that is nothing but bold text
+# (**Sensors:**). Deliberately NOT "any sentence ending in a colon" -- that first attempt
+# matched "Here is what I found:" and deleted the genuine heading above it. A rule that
+# removes real content to tidy up is worse than the untidiness.
+_HEADING_RE = re.compile(r"^\s*(?:#{1,6}\s+\S|\*\*[^*\n]+\*\*\s*:?\s*$)")
+
+
+def _drop_orphaned_headings(marked: list[tuple[str, bool]]) -> str:
+    """Remove headings whose OWN content was dropped.
+
+    Dropping a claim's line is right; leaving its heading behind is not. Asked what hardware
+    a robot used, the answer came back as:
+
+        The robot uses the following sensors and components:
+        **Sensors:**
+        **Components:**
+
+    -- every bullet dropped for a failed quote, every heading kept. The refusal was correct;
+    it just looked broken instead of honest, which costs the same trust as being wrong.
+
+    `marked` is (line, kept) over the ORIGINAL lines, and it has to be: a first attempt
+    checked the surviving lines instead, so a heading whose bullet had been dropped simply
+    ADOPTED the next unrelated paragraph as its body and survived anyway. The question is not
+    "is there anything after this heading" but "did anything that belonged to it survive" --
+    and only the original structure knows which lines belonged to it.
+    """
+    keep_flags = [kept for _, kept in marked]
+    for i, (line, kept) in enumerate(marked):
+        if not (kept and line.strip() and _HEADING_RE.match(line)):
+            continue
+        owns_surviving_content = False
+        for j in range(i + 1, len(marked)):
+            following, following_kept = marked[j]
+            if not following.strip():
+                continue
+            if _HEADING_RE.match(following):
+                break  # the next heading: this one's section is over
+            if following_kept:
+                owns_surviving_content = True
+                break
+        if not owns_surviving_content:
+            keep_flags[i] = False
+    return "\n".join(line for (line, _), keep in zip(marked, keep_flags) if keep)
+
+
+def _resolve(chunk_id: str, quote: str, by_id: dict[str, Chunk], context: list[Chunk]) -> Chunk | None:
+    """Find the chunk this quote genuinely came from, or None.
+
+    THE FIX FOR MOST FALSE REFUSALS -- and the guarantee is untouched.
+
+    Measured: the model frequently quotes text that IS in the retrieved context, and
+    attributes it to the WRONG chunk id. Asked who the Chairperson was, it quoted the
+    handbook correctly and cited `handbook:p3:right`, which is the Employee Record folio.
+    Asked about casual leave, it quoted s.115's real text against a handbook chunk. The
+    QUOTE was true; the POINTER was wrong. v1 stripped the claim, and a correct answer
+    became "not found" -- 36% of answerable questions, measured.
+
+    That is the wrong thing to punish. The invariant that matters is **"this text exists in
+    the source we retrieved"** -- that is what makes fabrication impossible. Which of the
+    eight retrieved chunks it sits in is bookkeeping the MODEL should not be trusted with
+    anyway; code can determine it exactly, and does.
+
+    So: try the cited chunk first (the common, correct case). If the span is not there,
+    search the other retrieved chunks for it. If it is found, the citation is BUILT FROM THE
+    CHUNK IT WAS ACTUALLY FOUND IN -- so the page number the reviewer sees is the real one,
+    not the model's guess.
+
+    NOTHING IS LOOSENED. The span must still exist, verbatim (modulo the OCR tolerance), in a
+    chunk that was actually retrieved for THIS question. An invented quote still matches
+    nothing and is still stripped. We stopped requiring the model to be right about which
+    drawer the fact was in -- not about whether the fact is there.
+    """
+    cited = by_id.get(chunk_id)
+    if cited is not None and verify_span(quote, cited):
+        return cited
+    # The pointer was wrong. Is the QUOTE real?
+    for candidate in context:
+        if candidate is cited:
+            continue
+        if verify_span(quote, candidate):
+            return candidate
+    return None
+
+
 def verify_answer(raw: str, context: list[Chunk]) -> tuple[str, list[Citation], bool]:
     """Strip unverifiable claims; force abstention if nothing survives.
 
@@ -214,19 +298,19 @@ def verify_answer(raw: str, context: list[Chunk]) -> tuple[str, list[Citation], 
     # with no markers is prose or structure (headings, connectives) and is kept. This is
     # blunt -- it can drop a line the model got right -- and that trade is deliberate:
     # completeness is worth less than the guarantee.
-    kept_lines: list[str] = []
+    marked: list[tuple[str, bool]] = []  # (rendered line, survived) over the ORIGINAL lines
     for line in INSUFFICIENT_RE.sub("", raw).split("\n"):
         markers = list(CLAIM_RE.finditer(line))
         if not markers:
-            kept_lines.append(line)
+            marked.append((line, True))
             continue
 
         line_ok = 0
         for m in markers:
             total += 1
-            chunk = by_id.get(m.group("chunk_id"))
             quote = m.group("quote")
-            if chunk is None or not verify_span(quote, chunk):
+            chunk = _resolve(m.group("chunk_id"), quote, by_id, context)
+            if chunk is None:
                 stripped += 1
                 continue
             line_ok += 1
@@ -234,12 +318,11 @@ def verify_answer(raw: str, context: list[Chunk]) -> tuple[str, list[Citation], 
             if citation not in citations:
                 citations.append(citation)
 
-        if line_ok:
-            # Remove the marker; do NOT inline the quote. The verbatim text is rendered once,
-            # in Sources, sliced from the chunk by code. Inlining it printed the quote twice.
-            kept_lines.append(CLAIM_RE.sub("", line))
+        # Remove the marker; do NOT inline the quote. The verbatim text is rendered once, in
+        # Sources, sliced from the chunk by code. Inlining it printed the quote twice.
+        marked.append((CLAIM_RE.sub("", line), bool(line_ok)))
 
-    answer = "\n".join(kept_lines)
+    answer = _drop_orphaned_headings(marked)
     answer = re.sub(r"[ \t]{2,}", " ", answer)
     answer = re.sub(r"\n{3,}", "\n\n", answer).strip()
 

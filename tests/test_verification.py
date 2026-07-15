@@ -239,3 +239,85 @@ def test_eleven_cannot_become_seven():
     c = Chunk(**{**CHUNK.model_dump(), "text": "eleven days of paid festival holidays"})
     assert verify_span("eleven days of paid festival", c)
     assert not verify_span("seven days of paid festival", c)
+
+
+def test_a_real_quote_cited_to_the_WRONG_chunk_is_recovered():
+    """THE false-refusal fix, and the guarantee is untouched.
+
+    Measured: the model quotes text that IS in the retrieved context but attributes it to the
+    wrong chunk id. Asked who the Chairperson was, it quoted the handbook correctly and cited
+    the Employee Record folio. The QUOTE was true; the POINTER was wrong. v1 stripped it, and
+    a correct answer became "not found" -- ~36% of answerable questions.
+
+    Which of eight retrieved chunks a fact sits in is bookkeeping the model should not be
+    trusted with; code can determine it exactly. The invariant that matters -- "this text
+    exists in what we retrieved" -- is unchanged.
+    """
+    other = Chunk(**{**CHUNK.model_dump(), "chunk_id": "statute:s999", "section_no": 999,
+                     "section_title": "Something else", "text": "Entirely unrelated text."})
+    raw = "You get 10 days [[chunk:statute:s999|casual leave with full wages for ten days]]."
+    text, citations, insufficient = verify_answer(raw, [other, CHUNK])
+
+    assert not insufficient, "a real quote must not be refused for a wrong pointer"
+    assert len(citations) == 1
+    # The citation is built from where the text ACTUALLY is -- so the page is real, not the
+    # model's guess.
+    assert citations[0].section_no == 115
+    assert citations[0].printed_page == 59
+
+
+def test_recovery_does_NOT_rescue_an_invented_quote():
+    """The loosening must stop exactly at 'wrong drawer, right fact'. A fabricated span
+    matches nothing in ANY retrieved chunk and is still stripped."""
+    other = Chunk(**{**CHUNK.model_dump(), "chunk_id": "statute:s999", "text": "Unrelated."})
+    raw = "You get [[chunk:statute:s999|forty days of casual leave]] a year."
+    _, citations, insufficient = verify_answer(raw, [other, CHUNK])
+    assert insufficient is True
+    assert citations == []
+
+
+def test_orphaned_headings_are_dropped_with_their_content():
+    """The REAL failure, from the CSE-350 upload test. The answer came back as:
+
+        The robot uses the following sensors and components:
+        **Sensors:**
+        **Components:**
+
+    Every bullet was dropped for a failed quote and every heading was kept, leaving a
+    skeleton. The refusal was correct; it just looked broken instead of honest, which costs
+    the same trust as being wrong.
+
+    (An earlier version of this test appended unrelated trailing prose and expected
+    **Components:** to be dropped anyway. That expectation was wrong: by markdown semantics a
+    heading's section runs to the NEXT heading, so the trailing line genuinely was its
+    content. The code was right and the test was badly written -- this is the shape that
+    actually occurred.)
+    """
+    raw = (
+        "The robot uses the following sensors and components:\n"
+        "**Sensors:**\n"
+        "- an IR sensor [[chunk:statute:s115|this quote is fabricated entirely]]\n"
+        "**Components:**\n"
+        "- a motor [[chunk:statute:s115|also completely made up]]\n"
+    )
+    text, citations, insufficient = verify_answer(raw, [CHUNK])
+
+    assert insufficient is True, "every claim failed, so this must be a refusal"
+    assert citations == []
+    assert "**Sensors:**" not in text, "a heading whose only content was dropped must go too"
+    assert "**Components:**" not in text
+
+
+def test_a_heading_keeps_its_surviving_content():
+    """The cut must not be greedy: a heading with ANY verified line under it stays."""
+    raw = (
+        "**Leave:**\n"
+        "- casual is ten days [[chunk:statute:s115|casual leave with full wages for ten days]]\n"
+        "- sick is fabricated [[chunk:statute:s115|sick leave for ninety days]]\n"
+    )
+    text, citations, insufficient = verify_answer(raw, [CHUNK])
+    assert not insufficient
+    assert "**Leave:**" in text, "one surviving claim keeps the heading"
+    assert "casual is ten days" in text
+    assert "sick is fabricated" not in text, "the unverified line still goes"
+    assert len(citations) == 1

@@ -19,12 +19,15 @@ class Settings(BaseSettings):
     # it off your admin console. So this is an env var, observed and dated, never a number
     # hardcoded from a blog post. The design honours whatever Retry-After the server sends.
     max_concurrent_requests: int = 1
-    # 1.0 was a GUESS and production logs falsified it: at 1 req/s Mistral's free tier
-    # returned fourteen consecutive 429s. This is now EVIDENCE, not a placeholder -- and it
-    # is honest about what it is. Mistral does not publish free-tier limits (their docs say
-    # to read your own admin console), so this is tuned to observed behaviour and dated.
-    # Observed 2026-07-16: 1.0 req/s -> 429 storm. 0.4 req/s -> clean.
-    requests_per_second: float = 0.4
+    # TOKENS per minute, not requests per second. Metering requests was measuring the wrong
+    # unit: at 1.0 req/s Mistral 429'd in a storm, and at 0.4 req/s with 3s gaps it STILL
+    # 429'd -- which falsifies the request model entirely. Each ask here is ~5k tokens, so
+    # six asks is ~30k tokens: trivial by request count, enormous by token count.
+    #
+    # Observed, not published (Mistral's docs say to read your own admin console), and
+    # deliberately conservative: being slow is a wait the user does not see, while being
+    # wrong is a 429 they do. Dated 2026-07-16.
+    tokens_per_minute: float = 30_000
 
     # Uploads only. Unset is a supported, tested state: the committed corpus and all six
     # demo questions work with zero network calls.
