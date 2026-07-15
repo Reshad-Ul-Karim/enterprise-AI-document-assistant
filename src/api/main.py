@@ -171,12 +171,12 @@ async def ask(request: AskRequest, http_request: Request) -> AskResponse:
     # I wrote this exact diagnosis in create_kb's docstring and fixed it there, without
     # checking whether the same pattern existed anywhere else. It did, on the busiest route
     # in the app.
-    # Reserve the request's TOKEN cost before sending it, because that is the unit the free
-    # tier actually meters. Estimated from the assembled context: the pinned handbook plus
-    # the retrieved sections, which is ~5k tokens for a typical ask and much more for a
-    # compare. A big question costs more budget than a small one -- which is the whole point,
-    # and precisely what metering requests could not express.
-    prompt_tokens = estimate_tokens(request.question) + corpus.pinned_token_estimate + 1500
+    # Reserve the request's TOKEN cost before sending it, because tokens are the unit the
+    # free tier actually meters. prompt_floor_tokens is the fixed part measured at boot --
+    # system prompt + pinned handbook + a rounded-up retrieval allowance -- because the first
+    # version counted only the handbook and under-reserved by 42%, so the gate spent 1.7x its
+    # own budget and 429'd anyway.
+    prompt_tokens = estimate_tokens(request.question) + corpus.prompt_floor_tokens
     async with state["gate"].reserve(prompt_tokens):  # type: ignore[union-attr]
         response = await run_in_threadpool(
             answer,

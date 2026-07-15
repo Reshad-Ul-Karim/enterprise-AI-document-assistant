@@ -81,14 +81,30 @@ class Corpus:
             raise RuntimeError(f"index shape {vectors.shape} vs {len(self.chunks)} chunks")
 
     @property
-    def pinned_token_estimate(self) -> int:
-        """The handbook is pinned into EVERY prompt, so it is a fixed floor on the token cost
-        of any question. Computed once at boot rather than per request."""
-        if not hasattr(self, "_pinned_est"):
-            from src.api.rategate import estimate_tokens
+    def prompt_floor_tokens(self) -> int:
+        """Every token a request costs BEFORE the question itself: system prompt + the pinned
+        handbook + an allowance for the retrieved statute sections.
 
-            self._pinned_est = estimate_tokens("".join(c.text for c in self.handbook))
-        return self._pinned_est
+        This exists because the first version counted only the handbook and reserved 5,643
+        tokens against a real prompt of 9,653 -- a 42% under-count. The gate believed it was
+        spending 5.6k while spending 9.7k, so it let through ~1.7x its own budget and 429'd
+        anyway. **A budget that mis-measures the thing it is budgeting is not a budget**, and
+        this is the third time this project metered the wrong quantity (requests instead of
+        tokens; retries outside the gate; now an incomplete prompt).
+
+        Measured at boot from the real artifacts rather than guessed, and the retrieval
+        allowance is rounded UP: over-reserving costs a little throughput, under-reserving
+        costs a 429 the user sees.
+        """
+        if not hasattr(self, "_floor"):
+            from src.api.rategate import estimate_tokens
+            from src.api.service import load_prompt
+
+            system = estimate_tokens(load_prompt("synthesis"))
+            handbook = estimate_tokens("".join(c.text for c in self.handbook))
+            retrieval_allowance = 4000  # 8 whole sections measured at ~2.7k; rounded up
+            self._floor = system + handbook + retrieval_allowance
+        return self._floor
 
     @property
     def handbook_text(self) -> str:

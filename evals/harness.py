@@ -26,6 +26,7 @@ Run:  python -m evals.harness            # retrieval + generation + judge
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import time
@@ -168,7 +169,13 @@ def run_oracle(corpus, generator, questions: list[dict]) -> dict:
     results = []
     for i, q in enumerate(questions):
         if i and i % 4 == 0:
-            time.sleep(60)  # ~4 calls/min: 500k TPM / ~90k tokens per call
+            # Hand-paced, NOT through the app's gate -- and the reason is honest arithmetic.
+            # One oracle call is ~90k tokens: three times the whole per-minute budget the gate
+            # is configured with. Reserving that would clamp to the capacity and 429 anyway.
+            # The oracle is a one-off offline measurement against a different (much larger)
+            # allowance, so it gets its own explicit pace. The REQUEST path uses the gate;
+            # this does not pretend to.
+            time.sleep(60)  # ~4 calls/min
         raw = generator.generate(load_prompt("synthesis"), f"{whole}\n\n# QUESTION\n{q['q']}")
         from src.core.verification import verify_answer
 
@@ -224,42 +231,89 @@ def main() -> int:
     generator = MistralGenerator(settings.mistral_api_key, settings.mistral_model)
 
     print("\n=== generation + abstention 2x2 ===")
+    # THE HARNESS USES THE APP'S OWN RATE GATE.
+    #
+    # It used to call answer() directly behind `time.sleep(1.2)` -- a naive request-per-second
+    # pace that production had already proven wrong. Half the questions died to 429s, n fell
+    # from 30 to 12, and the interval widened to +/-25pp: wide enough to swallow the very
+    # improvement the run was measuring. **An eval that cannot finish cannot measure
+    # anything**, and one that paces differently from the app measures a system nobody ships.
+    #
+    # ONE event loop for the whole run, deliberately. asyncio.Lock binds to the loop it is
+    # first awaited in, so a fresh asyncio.run() per question would raise "attached to a
+    # different loop" on the second one -- the gate has to live in a single loop, exactly as
+    # it does under uvicorn.
+    from src.api.rategate import RateGate, estimate_tokens
+
+    gate = RateGate(settings.max_concurrent_requests, settings.tokens_per_minute)
+
+    async def run_all() -> list[dict]:
+        out: list[dict] = []
+        for q in questions:
+            cost = estimate_tokens(q["q"]) + corpus.prompt_floor_tokens
+            try:
+                async with gate.reserve(cost):
+                    waited = gate.last_wait_s
+                    resp = await asyncio.to_thread(answer, q["q"], corpus, generator)
+            except Exception as exc:
+                print(f"  [{q['tier']}] {q['q'][:46]:48s} ERROR {type(exc).__name__}: {str(exc)[:40]}")
+                out.append({"q": q["q"], "tier": q["tier"], "error": type(exc).__name__})
+                continue
+            should = q["expected_behavior"] == "refuse"
+            did = resp.insufficient_information
+            mark = "ok " if should == did else "MISS"
+            pace = f" (+{waited:.0f}s paced)" if waited > 0.5 else ""
+            print(f"  {mark} [{q['tier']}] {q['q'][:44]:46s} {'REFUSE' if did else 'answer':6s} "
+                  f"cites={len(resp.citations)}{pace}")
+            out.append({
+                "q": q["q"], "tier": q["tier"], "expected": q["expected_behavior"],
+                "refused": did, "citations": len(resp.citations), "answer": resp.answer[:300],
+            })
+        return out
+
+    rows = asyncio.run(run_all())
+
     tp = fp = tn = fn = 0
-    rows = []
-    for q in questions:
-        time.sleep(1.2)  # the free tier is ~1 req/s; the gate is upstream anyway
-        try:
-            resp = answer(q["q"], corpus, generator)
-        except Exception as exc:
-            print(f"  [{q['tier']}] {q['q'][:48]:50s} ERROR {type(exc).__name__}")
+    for r in rows:
+        if "error" in r:
             continue
-        should_refuse = q["expected_behavior"] == "refuse"
-        did_refuse = resp.insufficient_information
-        if should_refuse and did_refuse:
+        should, did = r["expected"] == "refuse", r["refused"]
+        if should and did:
             tp += 1
-        elif should_refuse and not did_refuse:
-            fn += 1  # answered something it cannot know -- the dangerous one
-        elif not should_refuse and did_refuse:
-            fp += 1  # FALSE REFUSAL: a gate nobody measured for over-triggering
+        elif should and not did:
+            fn += 1  # answered something it cannot know -- the dangerous direction
+        elif not should and did:
+            fp += 1  # FALSE REFUSAL -- a correct answer thrown away
         else:
             tn += 1
-        mark = "ok " if (should_refuse == did_refuse) else "MISS"
-        print(f"  {mark} [{q['tier']}] {q['q'][:46]:48s} {'REFUSE' if did_refuse else 'answer':6s} cites={len(resp.citations)}")
-        rows.append({"q": q["q"], "tier": q["tier"], "expected": q["expected_behavior"],
-                     "refused": did_refuse, "citations": len(resp.citations), "answer": resp.answer[:300]})
 
+    scored = tp + fp + tn + fn
+    errors = sum(1 for r in rows if "error" in r)
     refuse_precision = tp / max(tp + fp, 1)
     false_refusal_rate = fp / max(fp + tn, 1)
     print(f"\n  abstention 2x2: TP={tp} FP={fp} TN={tn} FN={fn}")
-    print(f"    refusal precision  = {refuse_precision:.2f}  (of what it refused, how much SHOULD be refused)")
+    print(f"    refusal precision  = {refuse_precision:.2f}  (of what it refused, how much SHOULD be)")
     print(f"    FALSE-REFUSAL rate = {false_refusal_rate:.2f}  (answerable questions it wrongly refused)")
-    print("    -- reported as a 2x2, never as one number: refusing everything scores 100% on 'abstention'")
-    print(f"\n  n={len(rows)} -> 95% CI is about +/-10.7pp at a 90% score. An honest wide interval")
-    print("  beats a fake tight one.")
+    print("    -- a 2x2, never one number: refusing everything scores 100% on 'abstention'")
+    if errors:
+        print(f"\n  ⚠️  {errors}/{len(rows)} questions ERRORED and are excluded. A partial run is a")
+        print("     weaker measurement -- say n, not just the rate.")
+    # Wilson interval: honest at small n, unlike the normal approximation which is nonsense
+    # near 0 or 1 and would quietly flatter a rate built on a handful of questions.
+    import math
+    n = max(fp + tn, 1)
+    ph, z = false_refusal_rate, 1.96
+    denom = 1 + z * z / n
+    centre = (ph + z * z / (2 * n)) / denom
+    half = z * math.sqrt(ph * (1 - ph) / n + z * z / (4 * n * n)) / denom
+    print(f"\n  false-refusal 95% CI (Wilson, n={n}): {max(0, centre-half):.2f} - {min(1, centre+half):.2f}")
+    print(f"  scored {scored}/{len(questions)} questions.")
 
-    out["abstention"] = {"tp": tp, "fp": fp, "tn": tn, "fn": fn,
+    out["abstention"] = {"tp": tp, "fp": fp, "tn": tn, "fn": fn, "errors": errors,
+                         "scored": scored, "of": len(questions),
                          "refusal_precision": round(refuse_precision, 3),
-                         "false_refusal_rate": round(false_refusal_rate, 3)}
+                         "false_refusal_rate": round(false_refusal_rate, 3),
+                         "false_refusal_ci95": [round(max(0, centre-half), 3), round(min(1, centre+half), 3)]}
     out["rows"] = rows
 
     if args.oracle:
