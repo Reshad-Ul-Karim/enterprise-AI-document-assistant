@@ -8,6 +8,28 @@ An HR policy **compliance assistant** over the Partex Star Group Employee Handbo
 Ask a question in natural language; get a concise answer with the source document, the printed page number, and a verbatim
 quote — or an explicit *"not found in the provided documents."*
 
+## Two modes
+
+**Demo corpus — public, no sign-in.** The Employee Handbook + Labour Act compliance assistant.
+This is what the live URL opens on, deliberately: an assessment demo behind a login is a demo nobody sees.
+
+**My documents — sign-in required.** Upload any PDF and chat with it. Scanned PDFs are OCR'd via
+Mistral (an HTTP call, so it needs no local compute — the only reason runtime OCR is possible on a
+0.1-CPU free box). Auth gates *only* this surface, because uploading is what consumes quota and writes
+to a store.
+
+### Test credentials
+
+| | |
+|---|---|
+| Email | `reshad.sazid@gmail.com` |
+| Password | `aireshaddocument1234` |
+
+**This is a throwaway demo credential and it protects nothing valuable** — it exists because the
+assessment asks for test credentials, and anything published here is public by definition. The server
+stores only a **bcrypt hash**, in an environment variable; no plaintext and no hash is in this repo.
+There is no user table, because there is one account — a database of one row would be architecture theatre.
+
 > **60-second demo.** Open the live URL and click three chips, in this order:
 > 1. **"How many days of casual leave am I entitled to?"** — the handbook and s.115 agree. Citations working.
 > 2. **"Does our Employee Handbook comply with the Bangladesh Labour Act on maternity leave?"** — reasoning about an **absence**.
@@ -222,10 +244,29 @@ failure — and 422 would make the eval harness score every *correct* refusal as
 ## API
 
 ```
-POST /api/ask         → {answer, citations[], insufficient_information, route, latency_ms, request_id, index_version}
-GET  /health          → {status, index_loaded, chunk_count, index_version, model_id, generation_configured, pinecone_reachable}
-GET  /api/documents   → the curated manifest (real page counts + modality; never the filename)
+Public
+  POST /api/ask                    → {answer, citations[], insufficient_information, route, latency_ms, request_id}
+  GET  /health   (GET and HEAD)    → {status, index_loaded, chunk_count, model_id, pinecone_reachable, ...}
+  GET  /api/documents              → the curated manifest (real page counts + modality; never the filename)
+
+Authenticated (upload surface)
+  POST   /api/auth/login           → sets an HttpOnly, Secure, SameSite=Lax session cookie
+  POST   /api/auth/logout
+  GET    /api/auth/me              → {authenticated, uploads_persist}   (unauthenticated by design)
+  GET    /api/kb                   → list notebooks
+  POST   /api/kb                   → 201
+  DELETE /api/kb/{kb_id}
+  POST   /api/kb/{kb_id}/documents → 202 + {job_id}   (not a blocking upload)
+  GET    /api/jobs/{job_id}        → {state, progress, pages, chunks, modality, error}
 ```
+
+`/health` answers **HEAD as well as GET**. FastAPI's `APIRoute` does not auto-add HEAD the way plain
+Starlette does, so `@app.get("/health")` alone returns 405 to every uptime monitor on earth — which is
+how this was found, in production, within minutes.
+
+Upload is **202 + a job to poll**, never a blocking request: a 60-page scanned PDF is an OCR round-trip
+plus embedding — minutes, not seconds — and a synchronous upload would hit the proxy timeout and show a
+502 while the work was still succeeding.
 
 Citations are **typed objects the whole way out, never markdown strings** — you cannot `assert c.printed_page == 59` against
 `"— printed p.59 (PDF page 76)"` without a regex. Rendering happens in the UI from a typed object, so the model never emits a
@@ -291,8 +332,21 @@ and it's why exposing this over MCP would be a ~21-line adapter rather than a re
   demonstrates FR#5 in the ingestion layer.
 - **The table of contents (PDF pp. 2–16) is excluded** — dot-leader lines are lexically near-identical to every real section
   heading with zero answer content, i.e. maximally adversarial to BM25.
-- **Uploaded KBs:** vectors *and* text persist in Pinecone, but **job records are in-process and die on restart**. Ingestion is
-  idempotent on `sha256(bytes)`, so recovery is a re-upload — never a duplicate or a corruption.
+- **Uploaded documents are ephemeral on this deployment.** With no `PINECONE_API_KEY` set, uploaded
+  notebooks live in memory and are lost when the free tier sleeps or restarts. **The UI says so at upload
+  time, before you spend effort** — a demo that appears to lose your data is worse than one that never
+  offered to keep it. Set `PINECONE_API_KEY` and uploads persist (vectors *and* chunk text ride in the
+  namespace, so a restart loses nothing). Either way ingestion is idempotent on `sha256(bytes)`, so
+  recovery is a re-upload — never a duplicate, never a corruption.
+- **Uploaded documents get a demonstrably weaker pipeline than the demo corpus, and that is honest, not
+  an oversight.** The statute gets a chunker built on its own section grammar because I know that grammar;
+  an arbitrary PDF gets a generic recursive split because I don't. So uploaded citations carry a page
+  number but no section anchor, and **absence over an upload is bounded, not provable** — the app says
+  *"the retrieved passages do not cover X"*, never *"the document does not contain X"*, because it only
+  ever sees retrieved chunks.
+- **In-memory notebooks are capped** (3 KBs, 20 MB, 60 pages/upload). The box has 512 MB and the baseline
+  uses ~435 MB: an unbounded upload is an OOM, and an OOM on a free tier is not a degraded upload — it is
+  a dead URL for whoever was clicking the public demo. The caps protect the demo from the feature.
 - **Free-tier data training.** Mistral's free tier trains on submitted data **by default**; the opt-out is one toggle
   (Console → Privacy → "Anonymous improvement data"), and it is turned off here. Nothing in this corpus is confidential — it's a
   public statute plus a handbook supplied with the assessment. The durable answer is the model choice: `mistral-large-2512` is
