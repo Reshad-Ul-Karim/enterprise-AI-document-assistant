@@ -41,3 +41,30 @@ layers =
     src.api
     src.ingest
     src.core
+
+; CONTRACT 3 exists because contract 2 was not enough, and a failed deploy taught us that.
+;
+; `layers` permits a HIGHER layer to import a LOWER one, so `src.api -> src.ingest` was
+; legal and lint-imports passed. But `src.ingest` imports PyMuPDF -- a BUILD-TIME
+; dependency deliberately excluded from the runtime image. `api/main.py` imported MANIFEST
+; from `ingest/extract.py`, the container built cleanly, and it died on boot with
+; `ModuleNotFoundError: No module named 'pymupdf'`. Local tests passed the whole time,
+; because a dev machine has PyMuPDF installed.
+;
+; The rule the layering contract MEANT to express is stronger than the one it stated:
+; ingestion is an offline batch pipeline and serving is a stateless online service, so the
+; serving layer must never import the build layer AT ALL. Shared things (the manifest, the
+; page map, the models) belong in core/.
+;
+; This is the contract that would have caught it before the deploy did.
+
+[importlinter:contract:3]
+name = api never imports the build-time layer (ingest pulls PyMuPDF, which is not in the runtime image)
+type = forbidden
+source_modules =
+    src.api
+forbidden_modules =
+    src.ingest
+    pymupdf
+    fitz
+allow_indirect_imports = False

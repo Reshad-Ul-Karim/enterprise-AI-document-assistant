@@ -24,6 +24,7 @@ from pathlib import Path
 
 import pymupdf
 
+from src.core.manifest import MANIFEST
 from src.core.pagemap import ACT_PDF_PAGES, act_layer, act_page_is_indexed
 
 REPO = Path(__file__).resolve().parents[2]
@@ -31,33 +32,7 @@ ACT_PDF = REPO / "Assets" / "A Handbook on the Bangladesh Labour Act 2006.pdf"
 HANDBOOK_PDF = REPO / "Assets" / "Partex-Star-Group.pdf"
 EXTRACTED = REPO / "data" / "extracted"
 
-# doc_title comes from a CURATED MANIFEST, never the filename. 'Partex-Star-Group.pdf' is
-# misleadingly named -- its own PDF metadata title is 'Employee Handbook-Final'.
-MANIFEST = {
-    "handbook": {
-        "doc_id": "handbook",
-        "doc_title": "Employee Handbook (Partex Star Group)",
-        "source_file": "Partex-Star-Group.pdf",
-        "pdf_pages": 6,
-        "printed_folios": 10,
-        "modality": "text",
-        "note": "Landscape 2-up spread; PDF metadata title is 'Employee Handbook-Final'.",
-    },
-    "statute": {
-        "doc_id": "statute",
-        "doc_title": "Bangladesh Labour Act 2006",
-        "source_file": "A Handbook on the Bangladesh Labour Act 2006.pdf",
-        "pdf_pages": 181,
-        "printed_pages": 140,
-        "modality": "ocr",
-        "note": (
-            "100% scanned images, zero extractable text; OCR'd at build time. Published by "
-            "the Bangladesh Employers' Federation, 2009. Amended 2013 and 2018 -- those "
-            "amendments are NOT in this corpus."
-        ),
-    },
-}
-
+__all__ = ["MANIFEST", "extract_handbook", "load_act_ocr", "statute_layer_text", "normalise"]
 
 def normalise(text: str) -> str:
     """NFKC then join end-of-line hyphenation.

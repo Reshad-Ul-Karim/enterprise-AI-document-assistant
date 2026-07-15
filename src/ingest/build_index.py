@@ -18,10 +18,10 @@ import numpy as np
 from src.core.chunking import chunk_handbook, chunk_statute
 from src.core.embeddings import EMBED_DIM, EMBED_MODEL_ID, QUERY_PREFIX, embed_passages
 from src.core.sections import assert_build_gate, detect_sections
+from src.core.manifest import MANIFEST
 from src.ingest.extract import (
     ACT_PDF,
     HANDBOOK_PDF,
-    MANIFEST,
     extract_handbook,
     load_act_ocr,
     statute_layer_text,

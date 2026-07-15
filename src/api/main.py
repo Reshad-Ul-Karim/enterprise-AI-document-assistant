@@ -18,7 +18,7 @@ from src.api.rategate import RateGate
 from src.api.settings import settings
 from src.core.generator import Generator
 from src.core.models import AskRequest, AskResponse
-from src.ingest.extract import MANIFEST
+from src.core.manifest import MANIFEST
 
 REPO = Path(__file__).resolve().parents[2]
 STATIC = REPO / "static"
