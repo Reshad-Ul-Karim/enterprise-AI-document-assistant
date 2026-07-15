@@ -2,7 +2,7 @@
 
 **Live:** https://enterprise-ai-document-assistant-8baj.onrender.com · **Repo:** https://github.com/Reshad-Ul-Karim/enterprise-AI-document-assistant
 
-*(Free tier: it sleeps after 15 min idle. A cron keeps it warm; if you catch it cold, the first request takes ~1 min.)*
+*(Free tier: it sleeps after 15 min idle. An uptime monitor keeps it warm; if you catch it cold, the first request takes ~1 min.)*
 
 An HR policy **compliance assistant** over the Partex Star Group Employee Handbook and the Bangladesh Labour Act 2006.
 Ask a question in natural language; get a concise answer with the source document, the printed page number, and a verbatim
@@ -117,8 +117,15 @@ onnxruntime entirely, at the cost of a second API call per query. *On a rate-lim
 scarce resource, not dollars.*
 
 **Known free-tier behaviour, disclosed rather than discovered:** the service **spins down after 15 minutes idle** and takes ~1
-minute to wake. A GitHub Actions cron pings `/health` every 10 minutes to keep it warm. That is a workaround for a free tier, not
-an architectural claim.
+minute to wake. An external uptime monitor pings `/health` every 5 minutes to keep it warm.
+
+To be precise about what that costs, because the arithmetic is easy to get wrong: the ping does not consume the free allowance —
+**the service being awake does**, whoever wakes it. A calendar month is ~730 hours against Render's 750 free instance-hours, so one
+always-warm service fits, with ~20 hours spare. The real limit is that a second always-on free service would not.
+
+**This is a workaround for a free tier, not an architectural claim.** The cold start belongs to the hosting plan, not the app: the
+container boots in ~2s and `/health` answers in ~160ms once warm. On a paid instance the monitor exists for alerting, not for
+keeping the lights on.
 
 ### Measured (`corpus_stats.json`)
 
