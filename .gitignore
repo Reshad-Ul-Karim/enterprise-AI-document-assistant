@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.pytest_cache/
+.ruff_cache/
+.cache/
+
+# AgamiSoft's assessment brief. Deliberately NOT published: it is the employer's hiring
+# material, not part of this solution, and this repo is public. Nothing here needs it.
+Technical Assessment of AI Solutions Engineer - AgamiSoft Ltd..pdf

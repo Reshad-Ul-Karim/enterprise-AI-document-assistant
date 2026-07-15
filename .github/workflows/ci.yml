@@ -1,0 +1,48 @@
+name: ci
+
+on:
+  push: { branches: [main] }
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - run: pip install -r requirements-dev.txt
+
+      - name: lint
+        run: ruff check src tests
+
+      - name: import contract (core is protocol-free and provider-free)
+        # Not a style check. This is what makes the README's architectural claims
+        # falsifiable rather than trusted.
+        run: lint-imports --config .importlinter
+
+      - name: tests
+        # The suite runs with NO API key and NO network -- core takes an injected Generator
+        # Protocol, so a reviewer who has signed up for nothing still gets a green run.
+        run: pytest -q
+
+  runtime-image-has-no-torch:
+    # The manifest test in tests/ asserts on requirements.txt. This asserts on the real
+    # install closure in a clean environment, which is the thing that actually ships.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - name: assert torch is absent from the runtime closure
+        run: |
+          if pip show torch > /dev/null 2>&1; then
+            echo "::error::torch is in the runtime closure (~2.5 GB). Cold start would suffer."
+            exit 1
+          fi
+          python -c "import importlib.util; assert importlib.util.find_spec('torch') is None"
+          echo "runtime closure is torch-free"

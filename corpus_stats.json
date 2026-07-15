@@ -1,0 +1,37 @@
+{
+  "generated_by": "python -m src.ingest.corpus_stats",
+  "corpus": {
+    "documents": 2,
+    "pdf_pages_total": 187,
+    "act_pdf_pages": 181,
+    "act_ocr_chars": 498240,
+    "act_ocr_wall_seconds": 97.6,
+    "act_ocr_workers": 8,
+    "handbook_chars": 13080,
+    "handbook_printed_folios": 10
+  },
+  "tokens": {
+    "tokenizer": "mistral-common tekken v13",
+    "corpus_full": 122119,
+    "corpus_indexed_scope": 90462,
+    "handbook_pinned": 3081,
+    "model_context_window": 262144,
+    "corpus_pct_of_window": 46.6
+  },
+  "index": {
+    "chunk_count": 482,
+    "statute_chunks": 472,
+    "handbook_chunks": 10,
+    "section_count": 342,
+    "embed_model_id": "BAAI/bge-small-en-v1.5",
+    "embed_dim": 384,
+    "index_mb": 0.74,
+    "exact_cosine_top8_ms": 0.0076
+  },
+  "model": {
+    "id": "mistral-large-2512",
+    "context_window": 262144,
+    "licence": "Apache-2.0"
+  },
+  "latency_ratio": "model call (seconds) >> query embed (milliseconds) >> vector search (microseconds)"
+}

@@ -1,0 +1,12 @@
+# The source PDFs never enter the image: OCR is a build-time step and the extracted text
+# is committed. 16.25 MB + 536 KB stay in git, out of the container.
+Assets/
+data/
+docs/
+evals/
+tests/
+.git/
+*.pdf
+__pycache__/
+.pytest_cache/
+.venv/

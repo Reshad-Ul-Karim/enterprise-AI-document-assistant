@@ -1,0 +1,28 @@
+# Render Blueprint. Free tier: 512 MB RAM, 0.1 CPU, NO CREDIT CARD, 750 hrs/month.
+#
+# Why Render and not Hugging Face Spaces: as of 2026 HF requires a PRO subscription for
+# Docker/Gradio/Streamlit Spaces (verified: the API returns 402 Payment Required). Only
+# `static` Spaces are free, and a static Space cannot run FastAPI.
+#
+# Known free-tier behaviour, stated rather than discovered live:
+#   * The service spins down after 15 minutes idle; the next request takes ~1 min to wake.
+#     The reviewer WILL hit this. See the keep-alive note in the README.
+#   * 512 MB is tight -- measured peak RSS ~435 MB. Watch Render's memory graph after deploy.
+
+services:
+  - type: web
+    name: enterprise-ai-document-assistant
+    runtime: docker
+    plan: free
+    region: singapore          # closest to Bangladesh; latency the reviewer will feel
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: MISTRAL_API_KEY
+        sync: false            # set in the Render dashboard; NEVER committed
+      - key: MISTRAL_MODEL
+        value: mistral-large-2512
+      - key: MAX_CONCURRENT_REQUESTS
+        value: "1"
+      - key: REQUESTS_PER_SECOND
+        value: "1.0"

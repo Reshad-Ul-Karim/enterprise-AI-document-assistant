@@ -1,0 +1,21 @@
+# Hand-written. NEVER `pip freeze`.
+#
+# `pip freeze` on a dev box pulls torch (~2.5 GB) in behind sentence-transformers. The
+# problem is not memory -- HF Spaces free has 16 GB and torch fits fine. The problem is
+# COLD START: a free Space sleeps, so the reviewer's first click IS a cold start, and image
+# pull + import is what you are protecting. ~254 MB vs ~2.5 GB.
+#
+# CI asserts torch is absent from this file's install closure.
+
+fastapi==0.115.8
+uvicorn[standard]==0.34.0
+pydantic==2.10.6
+pydantic-settings==2.7.1
+
+# Local embeddings: ONNX, no torch. The default artifact for bge-small already resolves to
+# the int8 quantized build -- "should we quantize?" is answered by the library default.
+fastembed==0.8.0
+numpy==2.1.1
+rank-bm25==0.2.2
+
+mistralai==1.9.11

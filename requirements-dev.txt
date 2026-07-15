@@ -1,0 +1,11 @@
+-r requirements.txt
+
+# Build-time only: OCR, chunking, index build, corpus stats. None of this ships in the
+# runtime image -- ingestion is an offline batch pipeline, serving is a stateless service.
+pymupdf==1.26.6
+mistral-common[sentencepiece]==1.11.5
+
+pytest==8.4.2
+httpx==0.28.1
+import-linter==2.5
+ruff==0.9.6

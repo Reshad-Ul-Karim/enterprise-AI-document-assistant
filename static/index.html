@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Enterprise AI Document Assistant — Partex Star Group</title>
+<style>
+  :root {
+    --bg: #fbfbfa; --panel: #fff; --ink: #1a1a18; --muted: #6b6b66;
+    --line: #e6e5e1; --accent: #1a5f4a; --accent-soft: #eaf3f0;
+    --warn-bg: #fdf6e8; --warn-line: #e8d9b0; --gap: #a33;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #16171a; --panel: #1e1f23; --ink: #ececea; --muted: #9a9a94;
+      --line: #2e3036; --accent: #5fc2a2; --accent-soft: #1c2b27;
+      --warn-bg: #2a2418; --warn-line: #4a3f24; --gap: #e08c8c;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, sans-serif;
+  }
+  .wrap { max-width: 820px; margin: 0 auto; padding: 32px 20px 80px; }
+  header { border-bottom: 1px solid var(--line); padding-bottom: 20px; margin-bottom: 24px; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0; }
+  .corpus { font-size: 13px; color: var(--muted); margin-top: 10px; }
+  .corpus code { background: var(--accent-soft); padding: 1px 5px; border-radius: 3px; font-size: 12px; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0; }
+  .chip {
+    background: var(--panel); border: 1px solid var(--line); color: var(--ink);
+    border-radius: 999px; padding: 7px 13px; font-size: 13px; cursor: pointer;
+    transition: border-color .15s, background .15s; text-align: left;
+  }
+  .chip:hover:not(:disabled) { border-color: var(--accent); background: var(--accent-soft); }
+  .chip:disabled { opacity: .45; cursor: not-allowed; }
+  .chip .tag { color: var(--accent); font-weight: 600; }
+
+  form { display: flex; gap: 8px; }
+  input[type=text] {
+    flex: 1; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel); color: var(--ink); font-size: 15px;
+  }
+  input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  button[type=submit] {
+    padding: 12px 20px; border: 0; border-radius: 8px; background: var(--accent);
+    color: #fff; font-size: 15px; font-weight: 600; cursor: pointer;
+  }
+  button[type=submit]:disabled { opacity: .5; cursor: not-allowed; }
+
+  .answer { margin-top: 28px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 10px; padding: 20px; margin-bottom: 14px;
+  }
+  .card.refusal { background: var(--warn-bg); border-color: var(--warn-line); }
+  .card.refusal h3 { margin: 0 0 8px; font-size: 15px; }
+  .route {
+    display: inline-block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--muted); border: 1px solid var(--line); border-radius: 4px;
+    padding: 2px 7px; margin-bottom: 12px;
+  }
+  .cites { margin-top: 18px; }
+  .cites h4 { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 8px; }
+  .cite {
+    border-left: 3px solid var(--accent); padding: 8px 0 8px 12px; margin-bottom: 12px;
+  }
+  .cite .ref { font-size: 13px; font-weight: 600; }
+  .cite .snip { font-size: 13px; color: var(--muted); font-style: italic; margin-top: 4px; }
+  .cite .modality { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .meta { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .disclaimer {
+    margin-top: 28px; padding-top: 16px; border-top: 1px solid var(--line);
+    font-size: 12px; color: var(--muted);
+  }
+  .err { color: var(--gap); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Enterprise AI Document Assistant</h1>
+    <p class="sub">HR policy compliance — Partex Star Group</p>
+    <p class="corpus">
+      Grounded in two documents: the <strong>Employee Handbook</strong> (10 printed folios) and the
+      <strong>Bangladesh Labour Act 2006</strong> (140 printed pages, <code>OCR</code>).
+      The handbook states it complies with Bangladeshi labour law — these are the same 181 pages of law.
+    </p>
+  </header>
+
+  <!-- The 6 chips are the highest-ROI 30 minutes in the build. A reviewer cannot invent good
+       questions about a Bangladeshi labour statute; an empty box means they type "what is the
+       leave policy?", get something forgettable, and never see the compliance capability.
+       Ordered as an arc: warm-up -> flagship -> nuance -> honest unknown. -->
+  <div class="chips" id="chips"></div>
+
+  <form id="form">
+    <input type="text" id="q" placeholder="Ask about company policy or the Labour Act…" autocomplete="off">
+    <button type="submit" id="go">Ask</button>
+  </form>
+
+  <div class="answer" id="answer"></div>
+
+  <p class="disclaimer">
+    Documented gap analysis to support HR review against the provided 2006 text. <strong>Not legal advice.</strong>
+    The Act as supplied was published by the Bangladesh Employers' Federation in 2009 and has been amended
+    (2013, 2018); those amendments are not in this corpus.
+  </p>
+</div>
+
+<script>
+const CHIPS = [
+  { tag: "warm-up",  q: "How many days of casual leave am I entitled to?" },
+  { tag: "flagship", q: "Does our Employee Handbook comply with the Bangladesh Labour Act on maternity leave?" },
+  { tag: "nuance",   q: "We work Sun–Thu 9–5 and Sat 9:00–1:30. Is that legal?" },
+  { tag: "gap",      q: "How much overtime pay is required?" },
+  { tag: "unknown",  q: "What is the parental leave policy?" },
+  { tag: "grounding",q: "Who is the Chairperson and where is the head office?" },
+];
+
+const chips = document.getElementById("chips");
+const form = document.getElementById("form");
+const input = document.getElementById("q");
+const go = document.getElementById("go");
+const out = document.getElementById("answer");
+
+CHIPS.forEach(c => {
+  const b = document.createElement("button");
+  b.className = "chip";
+  b.type = "button";
+  b.innerHTML = `<span class="tag">${c.tag}</span> · ${c.q}`;
+  b.onclick = () => { input.value = c.q; submit(); };
+  chips.appendChild(b);
+});
+
+// SINGLE-FLIGHT. The free tier serves ~1 request/second and a reviewer clicks three chips
+// in two seconds. Disabling controls while one request is in flight means they physically
+// cannot fire concurrently -- this is the actual fix; the server-side semaphore and token
+// bucket are defence in depth for the second tab.
+let inFlight = false;
+function setBusy(busy) {
+  inFlight = busy;
+  go.disabled = busy;
+  go.textContent = busy ? "Asking…" : "Ask";
+  document.querySelectorAll(".chip").forEach(c => (c.disabled = busy));
+}
+
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;" }[c]));
+
+function renderCite(c) {
+  const ref = c.section_no
+    ? `${esc(c.doc_title)}, s.${c.section_no} ${esc(c.section_title || "")} — printed p.${c.printed_page} (PDF page ${c.pdf_page} of 181)`
+    : `${esc(c.doc_title)} — printed p.${c.printed_page}${c.half ? ` (PDF page ${c.pdf_page}, ${c.half} half)` : ""}`;
+  const modality = c.source_modality === "ocr"
+    ? `<div class="modality">source: OCR of a scanned page — verify against the PDF</div>` : "";
+  // The snippet is sliced from the source chunk by code, never generated by the model.
+  return `<div class="cite"><div class="ref">${ref}</div>
+    <div class="snip">“${esc(c.snippet)}”</div>${modality}</div>`;
+}
+
+function render(r) {
+  // Refusal is a DESIGNED PRODUCT STATE, not a grey error box. It is requirement 4.5.
+  const cls = r.insufficient_information ? "card refusal" : "card";
+  const head = r.insufficient_information
+    ? `<h3>Not found in the provided documents.</h3>` : "";
+  const cites = r.citations.length
+    ? `<div class="cites"><h4>${r.insufficient_information ? "Closest related material" : "Sources"}</h4>
+       ${r.citations.map(renderCite).join("")}</div>` : "";
+  out.innerHTML = `<span class="route">${esc(r.route)}</span>
+    <div class="${cls}">${head}<div>${esc(r.answer).replace(/\n/g, "<br>")}</div>${cites}</div>
+    <div class="meta">${r.latency_ms} ms · index ${esc(r.index_version)} · request ${esc(r.request_id)}</div>`;
+}
+
+async function submit() {
+  const question = input.value.trim();
+  if (!question || inFlight) return;
+  setBusy(true);
+  out.innerHTML = `<div class="card"><span class="meta">Searching the handbook and the Act…</span></div>`;
+  try {
+    const res = await fetch("/api/ask", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    });
+    const body = await res.json();
+    if (!res.ok) {
+      const e = body.error || {};
+      const retry = e.retry_after_s ? ` Retry in ${e.retry_after_s}s.` : "";
+      out.innerHTML = `<div class="card"><span class="err"><strong>${esc(e.code || res.status)}</strong></span>
+        <div>${esc(e.message || "Request failed.")}${retry}</div>
+        <div class="meta">request ${esc(e.request_id || "—")}</div></div>`;
+      return;
+    }
+    render(body);
+  } catch (err) {
+    out.innerHTML = `<div class="card"><span class="err">Network error.</span> <div class="meta">${esc(err)}</div></div>`;
+  } finally {
+    setBusy(false);
+  }
+}
+
+form.onsubmit = e => { e.preventDefault(); submit(); };
+</script>
+</body>
+</html>

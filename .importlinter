@@ -1,0 +1,43 @@
+; The core-purity contract.
+;
+; This is the single highest-leverage artifact in the repo. It is why:
+;   * the whole test suite runs with NO API key and NO network (inject FakeGenerator);
+;   * swapping the hosted Mistral API for self-hosted Apache-2.0 weights is a one-file
+;     change -- which is the real answer to "where does our data go?";
+;   * exposing retrieval over MCP would be a ~21-line adapter, not a refactor.
+;
+; The point is that none of those are README claims asking to be believed. The build fails
+; if they stop being true. Wired into pytest (tests/test_architecture.py) so `pytest` alone
+; proves it.
+;
+; Two gotchas that make copy-pasted configs fail:
+;   * include_external_packages = True is REQUIRED when forbidding external modules.
+;   * root_packages must be an indented list, not inline.
+
+[importlinter]
+root_packages =
+    src
+include_external_packages = True
+
+[importlinter:contract:1]
+name = core is protocol-free and provider-free
+type = forbidden
+source_modules =
+    src.core
+forbidden_modules =
+    fastapi
+    starlette
+    uvicorn
+    mcp
+    pinecone
+    mistralai
+    langchain_text_splitters
+allow_indirect_imports = False
+
+[importlinter:contract:2]
+name = layered
+type = layers
+layers =
+    src.api
+    src.ingest
+    src.core

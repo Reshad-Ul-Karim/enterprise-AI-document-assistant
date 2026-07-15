@@ -1,0 +1,142 @@
+"""FastAPI app."""
+
+from __future__ import annotations
+
+import json
+import logging
+import sys
+import uuid
+from contextlib import asynccontextmanager
+from pathlib import Path
+
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
+
+from src.api.errors import AppError, GenerationUnconfigured, IndexNotLoaded, app_error_handler
+from src.api.rategate import RateGate
+from src.api.settings import settings
+from src.core.generator import Generator
+from src.core.models import AskRequest, AskResponse
+from src.ingest.extract import MANIFEST
+
+REPO = Path(__file__).resolve().parents[2]
+STATIC = REPO / "static"
+
+logging.basicConfig(level=settings.log_level, stream=sys.stdout, format="%(message)s")
+log = logging.getLogger("app")
+
+
+def _log(event: str, **fields: object) -> None:
+    log.info(json.dumps({"event": event, **fields}))
+
+
+state: dict[str, object] = {"corpus": None, "generator": None, "gate": None, "error": None}
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    from src.api.service import Corpus
+
+    try:
+        state["corpus"] = Corpus(REPO / settings.index_dir)
+        _log("index_loaded", chunks=len(state["corpus"].chunks))  # type: ignore[union-attr]
+    except Exception as exc:
+        # /health reports this rather than the app crash-looping: a reviewer gets a
+        # diagnosis, not a blank page.
+        state["error"] = f"{type(exc).__name__}: {exc}"
+        _log("index_load_failed", error=state["error"])
+
+    state["gate"] = RateGate(settings.max_concurrent_requests, settings.requests_per_second)
+    if settings.generation_available:
+        from src.api.providers.mistral import MistralGenerator
+
+        state["generator"] = MistralGenerator(settings.mistral_api_key, settings.mistral_model)
+    yield
+
+
+app = FastAPI(
+    title="Enterprise AI Document Assistant",
+    description=(
+        "HR policy compliance assistant over the Partex Star Group Employee Handbook and "
+        "the Bangladesh Labour Act 2006."
+    ),
+    version="1.0.0",
+    lifespan=lifespan,
+)
+app.add_exception_handler(AppError, app_error_handler)  # type: ignore[arg-type]
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    request.state.request_id = str(uuid.uuid4())[:8]
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request.state.request_id
+    return response
+
+
+def _corpus():
+    if state["corpus"] is None:
+        raise IndexNotLoaded(state["error"] or "Index not loaded.")
+    return state["corpus"]
+
+
+def _generator() -> Generator:
+    if state["generator"] is None:
+        raise GenerationUnconfigured(
+            "MISTRAL_API_KEY is not set on this deployment. Retrieval and /health work; "
+            "answer generation does not."
+        )
+    return state["generator"]  # type: ignore[return-value]
+
+
+@app.get("/health")
+async def health() -> JSONResponse:
+    corpus = state["corpus"]
+    body = {
+        "status": "ok" if corpus else "degraded",
+        "index_loaded": corpus is not None,
+        "chunk_count": len(corpus.chunks) if corpus else 0,  # type: ignore[union-attr]
+        "index_version": corpus.meta["index_version"] if corpus else None,  # type: ignore[union-attr]
+        "model_id": settings.mistral_model,
+        "generation_configured": settings.generation_available,
+        # Deliberately a SEPARATE field from index_loaded: Pinecone serves uploads only, so
+        # it being unreachable must not imply the baseline demo is down.
+        "pinecone_reachable": bool(settings.pinecone_api_key),
+        "error": state["error"],
+    }
+    return JSONResponse(body, status_code=200 if corpus else 503)
+
+
+@app.get("/api/documents")
+async def documents() -> dict[str, object]:
+    """The curated manifest. Never the filename -- 'Partex-Star-Group.pdf' is misleadingly
+    named; its own PDF metadata title is 'Employee Handbook-Final'."""
+    return {"documents": list(MANIFEST.values())}
+
+
+@app.post("/api/ask", response_model=AskResponse)
+async def ask(request: AskRequest, http_request: Request) -> AskResponse:
+    from src.api.service import answer
+
+    corpus = _corpus()
+    generator = _generator()
+    async with state["gate"]:  # type: ignore[misc]
+        response = answer(request.question, corpus, generator, section_no=request.section_no)
+    _log(
+        "ask",
+        request_id=getattr(http_request.state, "request_id", None),
+        route=response.route,
+        insufficient=response.insufficient_information,
+        citations=len(response.citations),
+        latency_ms=response.latency_ms,
+    )
+    return response
+
+
+if STATIC.exists():
+    app.mount("/static", StaticFiles(directory=STATIC), name="static")
+
+    @app.get("/")
+    async def index() -> FileResponse:
+        return FileResponse(STATIC / "index.html")
