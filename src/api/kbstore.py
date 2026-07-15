@@ -295,5 +295,26 @@ class KbRegistry:
             retriever.reindex()  # type: ignore[union-attr]
 
     def delete(self, kb_id: str) -> None:
+        """Delete the notebook AND its namespace.
+
+        An earlier version dropped it only from the in-process registry. The Pinecone
+        namespace survived, so `rehydrate()` restored the notebook on the next boot and the
+        user's deletion silently undid itself. A delete that does not delete is worse than a
+        button that does nothing: the user believes the data is gone.
+
+        Vector store first, registry second. If the remote delete fails, the notebook stays
+        listed -- which is the honest state, because the data really is still there.
+        """
+        retriever = self.retrievers.get(kb_id)
+        if isinstance(retriever, PineconeKbRetriever):
+            try:
+                retriever.index.delete(delete_all=True, namespace=retriever.namespace)
+            except Exception as exc:
+                # 404 == the namespace is already gone, which is the goal. Anything else is
+                # real and must not be swallowed into a fake success.
+                if "not found" not in str(exc).lower() and "404" not in str(exc):
+                    raise UploadBackendUnavailable(
+                        f"Could not delete {kb_id!r} from Pinecone, so it is still there: {exc}"
+                    )
         self.kbs.pop(kb_id, None)
         self.retrievers.pop(kb_id, None)

@@ -124,8 +124,16 @@ def _run_ingest(registry, kb_id: str, job: Job, data: bytes, filename: str) -> N
         before = len(kb.chunks)
         ingest(data, filename, kb, job)
         if job.state == "done" and len(kb.chunks) > before:
+            # ingest() finishes by setting state=done and progress="Indexed N chunks...".
+            # Flipping back to "indexing" here left the UI showing a spinner NEXT TO a
+            # completion message -- the state said working, the text said finished. The
+            # upsert is real work (a network round-trip), so it gets its own honest message
+            # rather than borrowing the finished one.
             job.state = "indexing"
+            done_message = job.progress
+            job.progress = "Saving to Pinecone so it survives a restart…"
             registry.index_after_upload(kb_id, kb.chunks[before:])
+            job.progress = done_message
             job.state = "done"
     except Exception as exc:  # a failed upload must never take the process with it
         job.state = "failed"

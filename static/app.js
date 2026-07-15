@@ -169,48 +169,62 @@ async function ask(question) {
 
 /* ------------------------------------------------------------------ uploads */
 
-async function pollJob(jobId, kbId) {
+async function pollJob(jobId) {
   const box = $("upload-status");
   // Poll rather than block: a 60-page scanned PDF is an OCR round-trip plus embedding --
-  // minutes, not seconds. A synchronous upload would hit the proxy timeout and show a 502
-  // while the work was still succeeding.
-  for (let i = 0; i < 200; i++) {
+  // minutes, not seconds. A synchronous upload would hit the proxy timeout and hand the user
+  // a 502 while the work was still succeeding in the background.
+  for (let i = 0; i < 240; i++) {
     let j;
     try { j = await api(`/api/jobs/${jobId}`); }
     catch (err) { box.innerHTML = `<span class="err">${esc(err.message)}</span>`; return; }
 
     if (j.state === "failed") {
-      box.innerHTML = `<span class="err">Upload failed: ${esc(j.error || "unknown error")}</span>`;
+      box.innerHTML = `<span class="err"><strong>Upload failed.</strong> ${esc(j.error || "unknown error")}</span>`;
       return;
     }
     if (j.state === "done") {
       const how = j.modality === "ocr"
-        ? "scanned → OCR'd via Mistral (no local compute)"
+        ? "scanned → OCR'd via Mistral"
         : "text-native → extracted locally, no API call";
-      box.innerHTML = `<span class="ok">✓ ${esc(j.filename)} — ${j.pages} pages, ${j.chunks} chunks (${how})</span>`;
+      box.innerHTML = `<span class="ok">✓</span><span><strong>${esc(j.filename)}</strong> — ${j.pages} pages,
+        ${j.chunks} chunks <span style="color:var(--muted)">(${how})</span>. Ask a question below.</span>`;
+      document.querySelector(".bar")?.remove();
       await loadKbs();
-      $("file").value = "";
       return;
     }
-    box.innerHTML = `<span class="spin"></span> ${esc(j.progress || j.state)}…`;
+    // The spinner and the message must agree. An earlier version showed a spinner next to
+    // "Indexed 15 chunks..." because state said 'indexing' while progress had already been
+    // set to the completion text.
+    box.innerHTML = `<span class="spin"></span><span>${esc(j.progress || j.state)}</span>`;
+    if (!box.querySelector(".bar")) box.insertAdjacentHTML("afterend", `<div class="bar"><i></i></div>`);
     await new Promise((r) => setTimeout(r, 1500));
   }
   box.innerHTML = `<span class="err">Timed out waiting for ingestion.</span>`;
 }
 
-async function upload() {
-  const file = $("file").files[0];
+async function upload(file) {
   if (!file) return;
   if (!S.kbId) { alert("Create or pick a notebook first."); return; }
+  if (!file.name.toLowerCase().endsWith(".pdf")) {
+    $("upload-status").innerHTML = `<span class="err">Only PDF files are supported.</span>`;
+    return;
+  }
 
+  const drop = $("drop");
+  drop?.classList.add("busy");
   const fd = new FormData();
   fd.append("file", file);
-  $("upload-status").innerHTML = `<span class="spin"></span> Uploading ${esc(file.name)}…`;
+  $("upload-status").innerHTML =
+    `<span class="spin"></span><span>Uploading ${esc(file.name)}…</span>`;
   try {
     const { job_id } = await api(`/api/kb/${S.kbId}/documents`, { method: "POST", body: fd });
-    await pollJob(job_id, S.kbId);
+    await pollJob(job_id);
   } catch (err) {
-    $("upload-status").innerHTML = `<span class="err">${esc(err.code || "")} ${esc(err.message)}</span>`;
+    $("upload-status").innerHTML =
+      `<span class="err"><strong>${esc(err.code || "Upload failed")}</strong> ${esc(err.message)}</span>`;
+  } finally {
+    drop?.classList.remove("busy");
   }
 }
 
@@ -296,43 +310,86 @@ function newSession() {
 function renderNotebook() {
   const wrap = $("notebook-panel");
   if (!wrap) return;
+
+  // Stated BEFORE the user spends effort, not after. A demo that appears to lose your data
+  // is worse than one that never offered to keep it.
   const persist = S.uploadsPersist
-    ? `<span class="ok-badge">Persistent</span> Uploads are stored in Pinecone and survive restarts.`
-    : `<span class="warn-badge">Ephemeral</span> No <code>PINECONE_API_KEY</code> on this deployment, so uploaded notebooks live in memory and <strong>are lost when the server restarts or sleeps</strong>. Re-upload to restore — ingestion is idempotent, so it never duplicates.`;
+    ? `<span class="ok-badge">PERSISTENT</span> Uploads are stored in Pinecone and survive restarts.`
+    : `<span class="warn-badge">EPHEMERAL</span> No <code>PINECONE_API_KEY</code> here, so notebooks
+       live in memory and <strong>are lost when the server restarts or sleeps</strong>. Re-uploading
+       restores them — ingestion is idempotent, so it never duplicates.`;
+
+  const kbs = S.kbs.length
+    ? `<div class="kb-list">${S.kbs.map((k) => `
+        <div class="kb ${k.kb_id === S.kbId ? "active" : ""}" data-kb="${esc(k.kb_id)}">
+          <div class="kb-icon">${k.documents ? "▤" : "＋"}</div>
+          <div class="kb-body">
+            <div class="kb-name">${esc(k.name)}</div>
+            <div class="kb-meta">${
+              k.documents
+                ? `${k.documents} document${k.documents === 1 ? "" : "s"} · ${k.chunks} chunks · ${k.doc_titles.map(esc).join(", ")}`
+                : "empty — upload a PDF below"
+            }</div>
+          </div>
+          <button class="kb-del" data-del="${esc(k.kb_id)}" title="Delete this notebook">✕</button>
+        </div>`).join("")}</div>`
+    : `<div class="empty">No notebooks yet.<br>Create one below, then drop a PDF into it.</div>`;
+
+  const uploader = S.kbId
+    ? `<div class="drop" id="drop">
+         <input type="file" id="file" accept="application/pdf">
+         <div class="drop-main">Drop a PDF here, or click to choose</div>
+         <div class="drop-sub">Scanned PDFs are OCR'd via Mistral — no local compute needed.
+           Up to 20 MB / 60 pages.</div>
+       </div>
+       <div class="upload-status" id="upload-status"></div>`
+    : "";
 
   wrap.innerHTML = `
     <div class="persist-note">${persist}</div>
     <div class="kb-row">
       <input id="kb-name" type="text" placeholder="New notebook name…" maxlength="80">
-      <button id="kb-create" type="button">Create</button>
+      <button class="primary" id="kb-create" type="button">Create</button>
     </div>
-    ${S.kbs.length ? `<div class="kb-list">${S.kbs.map((k) => `
-      <div class="kb ${k.kb_id === S.kbId ? "active" : ""}" data-kb="${esc(k.kb_id)}">
-        <div>
-          <div class="kb-name">${esc(k.name)}</div>
-          <div class="kb-meta">${k.documents} doc${k.documents === 1 ? "" : "s"} · ${k.chunks} chunks
-            ${k.doc_titles.length ? `· ${k.doc_titles.map(esc).join(", ")}` : ""}</div>
-        </div>
-        <button class="kb-del" data-del="${esc(k.kb_id)}" title="Delete">×</button>
-      </div>`).join("")}</div>` : `<p class="hint">No notebooks yet. Create one, then upload a PDF.</p>`}
-    ${S.kbId ? `
-      <div class="upload-row">
-        <input type="file" id="file" accept="application/pdf">
-        <button id="upload-btn" type="button">Upload PDF</button>
-      </div>
-      <div id="upload-status" class="upload-status"></div>
-      <p class="hint">Scanned PDFs are OCR'd via Mistral — no local compute, so it works on a
-        free-tier box. Limits: 20 MB, 60 pages.</p>` : ""}`;
+    ${kbs}
+    ${uploader}`;
 
   $("kb-create")?.addEventListener("click", createKb);
-  $("upload-btn")?.addEventListener("click", upload);
+  $("kb-name")?.addEventListener("keydown", (e) => { if (e.key === "Enter") createKb(); });
+
   wrap.querySelectorAll(".kb").forEach((el) =>
     el.addEventListener("click", (e) => {
       if (e.target.dataset.del) return;
-      S.kbId = el.dataset.kb; S.history = []; $("thread").innerHTML = ""; renderNotebook();
+      selectKb(el.dataset.kb);
     }));
   wrap.querySelectorAll(".kb-del").forEach((el) =>
     el.addEventListener("click", (e) => { e.stopPropagation(); deleteKb(el.dataset.del); }));
+
+  const drop = $("drop");
+  if (drop) {
+    drop.addEventListener("click", () => $("file").click());
+    $("file").addEventListener("change", () => upload($("file").files[0]));
+    // Dragging a file onto the page is the gesture people reach for first. The <input> stays
+    // for keyboard and screen-reader users -- it is hidden, not removed.
+    ["dragenter", "dragover"].forEach((ev) =>
+      drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add("over"); }));
+    ["dragleave", "drop"].forEach((ev) =>
+      drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.remove("over"); }));
+    drop.addEventListener("drop", (e) => {
+      const f = e.dataTransfer?.files?.[0];
+      if (f) upload(f);
+    });
+  }
+}
+
+function selectKb(kbId) {
+  if (S.kbId === kbId) return;
+  S.kbId = kbId;
+  // Switching notebook starts a new conversation: history about a different document would
+  // be misleading context, and the model is told never to cite it anyway.
+  S.history = [];
+  $("thread").innerHTML = "";
+  renderNotebook();
 }
 
 function render() {
