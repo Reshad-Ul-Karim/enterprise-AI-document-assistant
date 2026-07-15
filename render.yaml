@@ -26,4 +26,6 @@ services:
       - key: MAX_CONCURRENT_REQUESTS
         value: "1"
       - key: REQUESTS_PER_SECOND
-        value: "1.0"
+        # Observed, not published: at 1.0 Mistral's free tier 429s in a storm. See
+        # src/api/settings.py. Raise it only with logs showing no 429s.
+        value: "0.4"

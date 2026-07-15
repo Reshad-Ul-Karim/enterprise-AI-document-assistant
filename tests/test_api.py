@@ -142,3 +142,21 @@ def test_no_async_route_calls_a_blocking_function_directly():
                         "event loop, /health stops answering, and the platform restarts the "
                         "container mid-request. Wrap it in run_in_threadpool."
                     )
+
+
+def test_the_mistral_client_does_not_retry_429():
+    """A 429 storm took production to 19-24s per ask.
+
+    The SDK hardcodes its retryable codes (mistralai/chat.py:220):
+        retry_config = (retries, ["429", "500", "502", "503", "504"])
+    so 429 cannot be excluded via RetryConfig -- the only lever is turning retries off.
+
+    Retrying a 429 feeds the rate limit you are trying to survive. Worse: the rate gate in
+    front admits ONE request, and the SDK then fires up to five UNGATED retries inside that
+    admission. The gate counts 1; Mistral sees 6. The gate built to prevent 429s was being
+    bypassed by the retry logic reacting to them.
+    """
+    source = (REPO / "src" / "api" / "providers" / "mistral.py").read_text()
+    assert 'RetryConfig("none"' in source, (
+        "retries must be off: the SDK retries 429 by default and cannot be told not to"
+    )

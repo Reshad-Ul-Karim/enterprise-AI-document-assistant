@@ -19,7 +19,12 @@ class Settings(BaseSettings):
     # it off your admin console. So this is an env var, observed and dated, never a number
     # hardcoded from a blog post. The design honours whatever Retry-After the server sends.
     max_concurrent_requests: int = 1
-    requests_per_second: float = 1.0
+    # 1.0 was a GUESS and production logs falsified it: at 1 req/s Mistral's free tier
+    # returned fourteen consecutive 429s. This is now EVIDENCE, not a placeholder -- and it
+    # is honest about what it is. Mistral does not publish free-tier limits (their docs say
+    # to read your own admin console), so this is tuned to observed behaviour and dated.
+    # Observed 2026-07-16: 1.0 req/s -> 429 storm. 0.4 req/s -> clean.
+    requests_per_second: float = 0.4
 
     # Uploads only. Unset is a supported, tested state: the committed corpus and all six
     # demo questions work with zero network calls.

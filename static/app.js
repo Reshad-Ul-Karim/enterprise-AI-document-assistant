@@ -106,6 +106,16 @@ function renderTurn(q, r) {
 }
 
 function renderError(err) {
+  // A 429 is not a fault -- it is the free tier doing exactly what it says on the tin. It
+  // gets a "please wait" card, not a red error, because presenting an expected condition as
+  // a failure teaches the user the app is broken when it is merely busy.
+  if (err.status === 429) {
+    const wait = err.retryAfter ? `${Math.ceil(err.retryAfter)} second${err.retryAfter > 1 ? "s" : ""}` : "a moment";
+    return `<div class="turn"><div class="card refusal">
+      <h3>Busy — please wait ${esc(wait)}.</h3>
+      <div>This runs on Mistral's free tier, which allows a limited number of requests per
+      minute. Your question wasn't lost; just ask it again shortly.</div></div></div>`;
+  }
   const retry = err.retryAfter ? ` Retry in ${err.retryAfter}s.` : "";
   return `<div class="turn"><div class="card err-card">
     <strong class="err">${esc(err.code || err.status || "Error")}</strong>
