@@ -38,7 +38,12 @@ class CreateKbRequest(BaseModel):
 
 @router.post("/auth/login")
 async def login(body: LoginRequest, response: Response) -> dict[str, object]:
-    if not verify_credentials(body.email, body.password):
+    # bcrypt is deliberately slow (~250 ms of CPU at cost factor 12) -- that is the point of
+    # it. But 250 ms of CPU in an async route is 250 ms the event loop serves nobody, and on
+    # a 0.1-CPU box it is longer. Off the loop, like every other blocking call here.
+    from starlette.concurrency import run_in_threadpool
+
+    if not await run_in_threadpool(verify_credentials, body.email, body.password):
         # One message for both wrong-email and wrong-password. Distinguishing them tells an
         # attacker which half they got right -- and this is the account-enumeration answer
         # the reviewer may probe for.

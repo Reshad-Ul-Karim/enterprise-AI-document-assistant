@@ -116,3 +116,29 @@ def test_health_answers_HEAD_not_just_GET(client):
     response = client.head("/health")
     assert response.status_code == 200, "HEAD /health must not 405 -- monitors default to HEAD"
     assert client.get("/health").status_code == 200
+
+
+def test_no_async_route_calls_a_blocking_function_directly():
+    """THE bug that took the site down, as a test.
+
+    answer() is synchronous and makes two network calls (~4s). Called straight from an
+    `async def`, it freezes the whole event loop -- so /health cannot respond while anyone is
+    asking a question, Render's health check fails, and Render restarts the container
+    mid-request. Production showed `HTTP 000 in 2s` on /api/ask with /health failing beside
+    it, while / and /api/documents stayed green.
+
+    I diagnosed this precisely, fixed it in create_kb, and did not check for the same shape
+    elsewhere. It was on the busiest route in the app. This test is the check I skipped.
+    """
+    import re
+
+    for path in (REPO / "src" / "api" / "main.py", REPO / "src" / "api" / "routes_kb.py"):
+        source = path.read_text()
+        for name, body in re.findall(r"\nasync def (\w+)\([^)]*\)[^:]*:\n(.*?)(?=\n@|\nasync def |\ndef |\Z)", source, re.S):
+            for call in ("answer(", "registry.create(", "registry.delete(", "verify_credentials("):
+                if call in body and "run_in_threadpool" not in body:
+                    raise AssertionError(
+                        f"async def {name}() calls blocking {call!r} directly. That freezes the "
+                        "event loop, /health stops answering, and the platform restarts the "
+                        "container mid-request. Wrap it in run_in_threadpool."
+                    )

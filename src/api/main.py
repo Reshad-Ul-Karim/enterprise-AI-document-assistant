@@ -12,6 +12,7 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from src.api.auth import AuthRequired, read_session
 from src.api.errors import AppError, GenerationUnconfigured, IndexNotLoaded, app_error_handler
@@ -157,8 +158,22 @@ async def ask(request: AskRequest, http_request: Request) -> AskResponse:
             raise KbNotFound(f"No knowledge base {request.kb_id!r}.")
         kb_retriever = registry.retrievers[request.kb_id]
 
+    # run_in_threadpool, and this one is not a nicety -- it was taking the site down.
+    #
+    # answer() is synchronous and makes two network calls: embed the query (~500 ms) and
+    # generate (~3 s). Called directly from an `async def`, that freezes the ENTIRE event
+    # loop for ~4 seconds. So /health cannot respond while anyone is asking a question,
+    # Render's health check times out, Render restarts the container -- and the asker's
+    # connection is reset mid-request. Observed in production as `HTTP 000 in 2s` on
+    # /api/ask with /health failing alongside it, while /  and /api/documents (which touch
+    # nothing blocking) stayed green.
+    #
+    # I wrote this exact diagnosis in create_kb's docstring and fixed it there, without
+    # checking whether the same pattern existed anywhere else. It did, on the busiest route
+    # in the app.
     async with state["gate"]:  # type: ignore[misc]
-        response = answer(
+        response = await run_in_threadpool(
+            answer,
             request.question,
             corpus,
             generator,
