@@ -1,5 +1,30 @@
 # Implementation Roadmap — Enterprise AI Document Assistant
 
+> ## ⚠️ SUPERSEDED IN TWO PLACES — read this first
+>
+> This roadmap was written before the app was deployed, and reality corrected it twice. The
+> corrections are left visible rather than edited away, because **the corrections are the most
+> instructive part of the document.**
+>
+> **1. Deploy target: NOT Hugging Face Spaces. Render.** HF made Docker/Gradio/Streamlit Spaces
+> PRO-only; only `static` Spaces remain free, and a static Space cannot run FastAPI. Verified
+> against their API: creating a Docker Space returns `402 Payment Required`.
+>
+> **2. Embeddings: NOT local fastembed/bge-small. Pinecone Inference (`llama-text-embed-v2`, 1024-dim).**
+> This follows from (1). Local embeddings were right for HF's 16 GB; on Render's **512 MB**,
+> onnxruntime's ~280 MB left 142 MB for an upload path needing ~190 — so uploads OOM-killed the
+> container and the reviewer got a 502 on the public demo. Measured baseline: **370 MB → 81 MB**
+> after removing it.
+>
+> **Both are the same failure: a decision that was correct when made, and never re-examined when
+> its premise moved.** So is the LLM router (§2), which was right when dollars were scarce and
+> wrong when requests were. That pattern — not any individual ruling — is the thing to carry.
+>
+> **[`README.md`](README.md) describes what was actually shipped. `corpus_stats.json` is the only
+> source of numbers.** Where this file says bge-small, 384-dim, 0.74 MB or HF Spaces, it is
+> describing the plan, not the product.
+
+
 **Status:** blueprint, ratified. **Budget: 22h.** Stack: Mistral + open source, **zero billing, no card on file**, free deployment.
 
 This is the *what* and *when*. The *why* — every rejected alternative and the measurement that killed it — lives in

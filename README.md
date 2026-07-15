@@ -85,7 +85,7 @@ flowchart TB
         CLIP["x-midline clip<br/>de-interleave 2-up folios"]
         SEC["dual-grammar regex + LIS<br/>342 sections · build gate"]
         CH["section-aware chunking<br/>482 chunks"]
-        EMB["fastembed bge-small<br/>384d int8 ONNX"]
+        EMB["Pinecone Inference<br/>llama-text-embed-v2 · 1024d"]
         P2 --> OCR --> SEC
         P1 --> CLIP --> CH
         SEC --> CH --> EMB
@@ -96,12 +96,12 @@ flowchart TB
     end
     EMB --> IDX
 
-    subgraph RUN ["RUNTIME — Render free · 512 MB · 0.1 CPU · no GPU · no tesseract · no PDFs"]
+    subgraph RUN ["RUNTIME — Render free · 512 MB · 0.1 CPU · no GPU · no tesseract · no torch · no PDFs"]
         direction TB
         UI["static UI · 6 chips · single-flight"]
         API["FastAPI · typed errors · rate gate"]
         PIN["handbook PINNED in full<br/>3,081 tokens"]
-        RET["hybrid BM25 + dense · RRF k=60<br/>top-8 statute · 0.008 ms"]
+        RET["hybrid BM25 + dense · RRF k=60<br/>top-8 statute · exact cosine, no ANN"]
         GEN["mistral-large-2512<br/>ONE call · 256k ctx · Apache-2.0"]
         VER["span verification in CODE<br/>strip → insufficient_information"]
         UI --> API --> RET
@@ -154,12 +154,34 @@ keeping the lights on.
 | | |
 |---|---|
 | Corpus | **122,119 tokens** (tekken v13) = **46.6%** of the 262,144 window |
-| Index | 482 chunks · 342 sections · **0.74 MB** |
-| Vector search | **0.008 ms** (exact cosine, top-8) |
-| Query embed | ~2.4 ms |
-| Model call | 1,000–3,000 ms |
+| Index | 482 chunks · 342 sections · **1.974 MB** (1024-dim) |
+| Embedder | `llama-text-embed-v2` via Pinecone Inference (free tier) |
+| Vector search | **0.0148 ms** (exact cosine, top-8, local) |
+| Query embed | ~500 ms (**network** — see below) |
+| Model call | 1,000–3,000 ms (longer on 0.1 CPU) |
 
-**Model call (seconds) ≫ query embed (milliseconds) ≫ vector search (microseconds).** That ratio is why there is no ANN index.
+**Model call (seconds) ≫ query embed (~500 ms) ≫ vector search (microseconds).** The vector search is still a rounding error, which is why there is no ANN index.
+
+### Embeddings were local, and had to stop being
+
+This is the most interesting decision in the build, because it was **right when made and wrong three days later**.
+
+Local embeddings (`fastembed` / `BAAI/bge-small-en-v1.5` / onnxruntime) were correct for the original target, **Hugging Face Spaces at 16 GB**, where onnxruntime's ~280 MB is a rounding error. The argument was sound: a remote embedder puts a network call in the query path, and on a rate-limited free tier requests are scarce while local compute is free.
+
+Then HF made Docker Spaces PRO-only, the deploy moved to **Render's 512 MB**, and the premise died without the decision being revisited. Measured (current RSS, fresh process each):
+
+| | baseline | headroom | uploads |
+|---|---|---|---|
+| with onnxruntime | **370 MB** | 142 MB | **OOM → 502 on the public demo** |
+| without | **81 MB** | **431 MB** | fine |
+
+An upload needs ~190 MB. No amount of batching fixes a baseline that is 72% of the ceiling — that is arithmetic, not tuning. **Local compute is not free when memory is the scarce resource.**
+
+*It is the same shape as the LLM router*: a trade that was correct when written and wrong once its premise moved, in both cases unnoticed until something broke.
+
+**Why Pinecone Inference**, given the expert council explicitly rejected it: its objection was that using it for uploads while the committed corpus used local bge would create **two embedding spaces** — the same query embedding differently depending on which store it hit, silently incomparable. That objection dies if *everything* uses it. One model, one space, both stores. Free, no card, and already a dependency.
+
+**What it costs, honestly:** the query path gains a ~500 ms network call, and *"the committed corpus answers with zero network calls"* is **no longer true** — retrieval now depends on Pinecone. Generation already required Mistral, so the request path was never network-free end to end. Retrieval quality was unchanged: all five probe queries still rank the governing section first.
 
 ---
 
@@ -171,16 +193,18 @@ cannot score it without a retriever; citation provenance is *by construction* wh
 context-stuffing invents them; and it doesn't survive the six-document corpus the spec actually described. The full-context
 baseline is in the eval as the **oracle** — the ceiling retrieval is measured against.
 
-**Why no vector database — and then why Pinecone?** Two stores, split on **data lifetime, not speed**. The committed corpus is 482
-vectors / 0.74 MB / 0.008 ms — a file that loads at boot with zero network, so nobody else's free-tier quota can break the live URL.
+**Why no vector database — and then why Pinecone?** Two stores, split on **data lifetime, not speed**. The committed corpus is
+482 vectors / 1.974 MB / 0.0148 ms — a file that loads at boot and is searched locally, so nobody else's quota can
+break the *search*. (The query's *embedding* is an API call — see above. The index itself is still a file, and that is the part
+that matters here.)
 Uploaded KBs are different data with a different lifetime: the Spaces disk is ephemeral, so they must live off-box. Honest caveat
 that a reviewer can check in one click: **HF Storage Buckets are free, first-party and mount read-write** — they'd reuse the numpy
 store with one fewer vendor. Pinecone is here for the **namespace primitive**, which fails closed (a metadata filter you forget
 *leaks*; a namespace you forget *returns nothing*). Not because there was no alternative.
 
-**Why no ANN index?** At 482 vectors exact cosine costs 0.008 ms — a rounding error against a ~2s model call. HNSW
-(`m=16, ef_construction=200, ef_search=64`) earns its place around 50k vectors, where the exact scan crosses ~10 ms. Reaching for a
-distributed vector DB to serve 0.74 MB is infrastructure cosplay.
+**Why no ANN index?** At 482 vectors exact cosine costs 0.0148 ms — a rounding error against a ~2s model call, and now
+against a ~500 ms embedding call too. HNSW (`m=16, ef_construction=200, ef_search=64`) earns its place around 50k vectors, where
+the exact scan crosses ~10 ms. Reaching for a distributed ANN index to serve 1.974 MB is infrastructure cosplay.
 
 **Why no agent?** I planned one — 121 `section N` cross-references looked like multi-hop retrieval. Then I went hunting for a query
 single-shot actually gets wrong. The example everyone reaches for is s.100's eight-hour cap "subject to the provisions of section

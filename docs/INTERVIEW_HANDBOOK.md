@@ -27,7 +27,7 @@ documents, **paste** them into the model's prompt, **ask** the question. The mod
 text you supplied instead of from memory. "Retrieval" = the finding, "augmented" = the pasting,
 "generation" = the answering.
 
-**Embedding.** A model that turns text into a list of numbers (here, 384 of them) positioned so
+**Embedding.** A model that turns text into a list of numbers (here, 1024 of them) positioned so
 that *similar meanings land near each other*. "How much holiday do I get?" lands near "annual
 leave with wages" even though they share no words. Comparing two embeddings = measuring the angle
 between two arrows. That's **cosine similarity**: 1.0 = identical direction, 0 = unrelated.
@@ -280,13 +280,35 @@ The pattern for all of them: **name the thing, give the measurement, state when 
 > when each chunk carries its own page number, whereas context-stuffing invents them; and it doesn't
 > survive the six-document corpus your spec described. **I don't defend it on cost.**"*
 
+### "Your embeddings are an API call. Didn't you say local compute was free?" *(volunteer this)*
+> *"I did, and I was right — for the machine I was targeting. Local embeddings were the correct
+> call for Hugging Face Spaces at sixteen gigabytes, where onnxruntime's two hundred and eighty
+> megabytes is a rounding error, and the argument holds: a remote embedder puts a network call in
+> the query path, and on a rate-limited free tier requests are the scarce resource.*
+>
+> *Then Hugging Face made Docker Spaces PRO-only, I moved to Render's five hundred and twelve
+> megabytes, and my premise died without me noticing. Measured: three hundred and seventy megabytes
+> baseline with onnxruntime, eighty-one without. An upload needs about a hundred and ninety. So
+> uploads OOM-killed the container and the reviewer got a 502 — on the public demo, which shares
+> nothing with uploads except a process. I tried capping and batching first; neither works, because
+> no amount of batching fixes a baseline that's seventy-two percent of the ceiling. That's
+> arithmetic, not tuning.*
+>
+> *Local compute is not free when memory is what you're short of. It's the same mistake as my
+> router — a trade that was correct when I made it and wrong once its premise moved, and in both
+> cases I didn't re-examine it until something broke. What it costs me now is about five hundred
+> milliseconds per query and the claim that retrieval is network-free. What it buys is that the
+> feature can't take down the demo."*
+
 ### "Why no vector database — and then why is Pinecone in here?"
 *(Answer as one breath. Lead with lifecycle, not speed.)*
 > *"Two stores, and what decides between them is **data lifetime, not performance**. The committed
-> corpus is 482 vectors — 0.74 megabytes, exact cosine in 0.008 milliseconds. Putting that in
-> Pinecone would make your cold visit depend on a third party's free-tier quota. So it's a file that
-> loads at boot with zero network. Uploaded knowledge bases are different data with a different
-> lifetime — the Spaces disk is ephemeral, so they must live off-box. One retriever protocol, two
+> corpus is 482 vectors — 1.974 megabytes, exact cosine in 0.0148 milliseconds. Putting the *index* in
+> Pinecone would make your cold visit depend on a third party's quota for something that's a file in
+> my repo, so it loads at boot and is searched locally. I'll be precise, because it changed: the
+> query's **embedding** is an API call now — about five hundred milliseconds — so retrieval isn't
+> network-free end to end. The *index* is. Uploaded knowledge bases are different data with a
+> different lifetime — the disk is ephemeral, so they must live off-box. One retriever protocol, two
 > backends, both on live traffic. **And I'll be straight about the alternative:** Hugging Face
 > Storage Buckets are free, first-party and mount read-write — they'd have reused my numpy store
 > with one fewer vendor. I chose Pinecone for the namespace primitive, because isolation that
@@ -495,12 +517,12 @@ Senior engineers are distinguished by how they talk about being wrong. **Have on
 | OCR | 498,240 chars, ~98s, 8 workers, deterministic |
 | Sections | **342** (dual-grammar + LIS) |
 | Chunks | **482** (472 statute + 10 handbook) |
-| Index | **0.74 MB**, exact cosine **0.008 ms** |
+| Index | **1.974 MB**, exact cosine **0.0148 ms**, 1024-dim |
 | Page map | `printed = pdf_index − 16`, 6 footers verified |
 | Model | `mistral-large-2512`, 256k ctx, **Apache 2.0**, pinned |
-| Embeddings | bge-small, 384d, int8 ONNX, **local** |
+| Embeddings | `llama-text-embed-v2` via **Pinecone Inference** (~500 ms, network) |
 | Retrieval | BM25 + dense, **RRF k=60**, top-8 |
-| Latency | model **seconds** ≫ embed **ms** ≫ search **µs** |
+| Latency | model **seconds** ≫ embed **~500 ms** ≫ search **µs** |
 | Tests | **38**, green with **no API key** |
 
 **If you remember one sentence:** *"Ingestion is an offline batch pipeline; serving is a stateless
