@@ -364,7 +364,7 @@ function switchMode(mode) {
   document.querySelectorAll(".chip").forEach((b) =>
     b.addEventListener("click", () => ask(b.dataset.q)));
 
-  $("form").addEventListener("submit", (e) => { e.preventDefault(); ask($("q").value.trim()); });
+  $("composer").addEventListener("submit", (e) => { e.preventDefault(); ask($("q").value.trim()); });
   $("tab-demo").addEventListener("click", () => switchMode("demo"));
   $("tab-notebook").addEventListener("click", () => switchMode("notebook"));
   $("login-form").addEventListener("submit", login);
