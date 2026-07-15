@@ -1,5 +1,9 @@
 # Enterprise AI Document Assistant
 
+**Live:** https://enterprise-ai-document-assistant-8baj.onrender.com · **Repo:** https://github.com/Reshad-Ul-Karim/enterprise-AI-document-assistant
+
+*(Free tier: it sleeps after 15 min idle. A cron keeps it warm; if you catch it cold, the first request takes ~1 min.)*
+
 An HR policy **compliance assistant** over the Partex Star Group Employee Handbook and the Bangladesh Labour Act 2006.
 Ask a question in natural language; get a concise answer with the source document, the printed page number, and a verbatim
 quote — or an explicit *"not found in the provided documents."*

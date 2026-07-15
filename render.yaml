@@ -7,6 +7,7 @@
 # Known free-tier behaviour, stated rather than discovered live:
 #   * The service spins down after 15 minutes idle; the next request takes ~1 min to wake.
 #     The reviewer WILL hit this. See the keep-alive note in the README.
+#   * Live at https://enterprise-ai-document-assistant-8baj.onrender.com
 #   * 512 MB is tight -- measured peak RSS ~435 MB. Watch Render's memory graph after deploy.
 
 services:
