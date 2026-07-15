@@ -23,7 +23,7 @@ from pathlib import Path
 import numpy as np
 
 from src.core.generator import Generator
-from src.core.models import AskResponse, Chunk
+from src.core.models import AskResponse, Chunk, Turn
 from src.core.retrieval import DEFAULT_TOP_K, NumpyRetriever, assemble_context
 from src.core.verification import derive_route, verify_answer
 
@@ -31,9 +31,12 @@ REPO = Path(__file__).resolve().parents[2]
 PROMPTS = REPO / "prompts"
 
 
-@lru_cache(maxsize=1)
-def load_prompt() -> str:
-    return (PROMPTS / "synthesis.md").read_text()
+@lru_cache(maxsize=4)
+def load_prompt(name: str = "synthesis") -> str:
+    """Prompts are versioned .md loaded at runtime -- never inline f-strings. The assessment
+    requires explaining them at interview, so the git history of prompts/ IS the tuning
+    curve, and each revision can carry its eval delta in the commit message."""
+    return (PROMPTS / f"{name}.md").read_text()
 
 
 class Corpus:
@@ -94,28 +97,70 @@ def build_context_block(handbook: list[Chunk], statute: list[Chunk]) -> str:
     )
 
 
+def build_uploaded_block(chunks: list[Chunk]) -> str:
+    def render(chunk: Chunk) -> str:
+        return (
+            f"[[chunk:{chunk.chunk_id}]] {chunk.doc_title} (page {chunk.printed_page})\n{chunk.text}"
+        )
+
+    return "# UPLOADED DOCUMENTS (retrieved passages)\n\n" + "\n\n".join(render(c) for c in chunks)
+
+
+def _history_block(history: list[Turn]) -> str:
+    """Prior turns, supplied by the client on every request.
+
+    Stateless by design: a server-side session store would die with the container on a free
+    tier that sleeps and restarts, and a 262,144-token window makes resending a few turns
+    free. The trade is that the client can lie about the history -- which does not matter
+    here, because every CLAIM is still verified against retrieved source text regardless of
+    what the conversation says.
+    """
+    if not history:
+        return ""
+    turns = "\n\n".join(f"Q: {t.question}\nA: {t.answer}" for t in history[-5:])
+    return (
+        "\n\n# EARLIER IN THIS CONVERSATION (context only -- never cite this, cite the "
+        f"documents)\n\n{turns}\n"
+    )
+
+
 def answer(
     question: str,
     corpus: Corpus,
     generator: Generator,
     top_k: int = DEFAULT_TOP_K,
     section_no: int | None = None,
+    history: list[Turn] | None = None,
+    kb_retriever: object | None = None,
 ) -> AskResponse:
     started = time.perf_counter()
     request_id = str(uuid.uuid4())[:8]
+    history = history or []
 
-    if section_no is not None:
-        statute = corpus.statute_retriever.get_section(section_no)
+    if kb_retriever is not None:
+        # An UPLOADED knowledge base. Nothing is pinned -- an arbitrary document may be far
+        # larger than the 3,081-token handbook, so it must be retrieved over. That means
+        # absence here is BOUNDED, not provable: "I didn't find it in what I retrieved"
+        # rather than "it isn't there". The asymmetry is real and the README says so.
+        hits = kb_retriever.search(question, k=top_k)  # type: ignore[attr-defined]
+        available = [c for c, _ in hits]
+        context = build_uploaded_block(available)
+        prompt = load_prompt("uploaded")
     else:
-        statute = assemble_context(corpus.statute_retriever.search(question, k=top_k))
+        if section_no is not None:
+            statute = corpus.statute_retriever.get_section(section_no)
+        else:
+            statute = assemble_context(corpus.statute_retriever.search(question, k=top_k))
+        # ASYMMETRIC: the handbook is pinned in full, so its silence is PROVABLE.
+        available = corpus.handbook + statute
+        context = build_context_block(corpus.handbook, statute)
+        prompt = load_prompt("synthesis")
 
-    context = build_context_block(corpus.handbook, statute)
-    raw = generator.generate(load_prompt(), f"{context}\n\n# QUESTION\n{question}")
+    raw = generator.generate(prompt, f"{context}{_history_block(history)}\n\n# QUESTION\n{question}")
 
     # The model's output is not trusted. Every quoted span is checked against the chunk it
     # claims to come from; unverifiable claims are stripped; if nothing survives,
     # insufficient_information is set BY CODE rather than chosen by the model.
-    available = corpus.handbook + statute
     text, citations, insufficient = verify_answer(raw, available)
 
     return AskResponse(

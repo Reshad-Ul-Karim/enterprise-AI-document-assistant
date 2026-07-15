@@ -78,11 +78,25 @@ class Citation(BaseModel):
         return f"{self.doc_title}, printed p.{self.printed_page} (PDF page {self.pdf_page})"
 
 
+class Turn(BaseModel):
+    """One prior exchange. History is sent BY THE CLIENT on every request.
+
+    Server-side sessions would die with the container on a free tier that restarts and
+    sleeps. Client-held history is stateless, survives every restart, and costs nothing --
+    and against a 262,144-token window, resending a few turns is free.
+    """
+
+    model_config = ConfigDict(frozen=True)
+    question: str = Field(max_length=1000)
+    answer: str = Field(max_length=8000)
+
+
 class AskRequest(BaseModel):
     question: str = Field(min_length=3, max_length=1000)
     kb_id: str = "default"
     doc_filter: Literal["handbook", "statute"] | None = None
     section_no: int | None = Field(default=None, ge=1, le=354)  # a free 422 on nonsense
+    history: list[Turn] = Field(default_factory=list, max_length=10)
 
 
 class AskResponse(BaseModel):

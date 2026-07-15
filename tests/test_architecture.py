@@ -52,6 +52,20 @@ def test_runtime_requirements_do_not_pull_torch():
     for banned in ("torch", "sentence-transformers", "transformers", "langchain", "langgraph"):
         assert banned not in names, f"{banned!r} must not be a runtime dependency"
 
+    # `transformers` and `pyarrow` are not merely bloat here -- they are a CRASH.
+    # langchain_text_splitters' __init__ reaches for transformers when it is importable,
+    # which on a machine that also has tensorflow/pyarrow aborts at the C++ level:
+    #   libc++abi: terminating due to uncaught exception ... mutex lock failed
+    # A C++ abort is NOT catchable by try/except, so it kills the whole uvicorn process --
+    # observed locally: one upload took the server down, and with it the public demo.
+    # The image is safe only because neither package is in the closure. That is a
+    # guarantee worth asserting rather than a coincidence worth relying on.
+    for crash_risk in ("transformers", "pyarrow", "tensorflow", "streamlit"):
+        assert crash_risk not in names, (
+            f"{crash_risk!r} in the runtime closure would make langchain_text_splitters' "
+            "import abort at the C++ level and kill the process on the first upload."
+        )
+
 
 def test_langchain_metapackage_is_not_installed():
     """Not installing it makes the rejection STRUCTURAL rather than aspirational.
@@ -63,3 +77,62 @@ def test_langchain_metapackage_is_not_installed():
     import importlib.util
 
     assert importlib.util.find_spec("langchain") is None
+
+
+def test_upload_stack_is_lazy_so_the_public_demo_never_pays_for_it():
+    """The demo path must not import langchain/langsmith/pinecone/pypdf.
+
+    Those exist for the authenticated upload surface. The box has 512 MB and the baseline
+    already uses ~435 MB, so importing the upload stack at boot would spend the public
+    demo's headroom on a feature most visitors never touch. Booting the app must stay lean.
+    """
+    import subprocess
+    import sys
+
+    code = (
+        "import sys; import src.api.main; "
+        "heavy=[m for m in ('langchain_core','langsmith','pinecone','pypdf') if m in sys.modules]; "
+        "print(','.join(heavy))"
+    )
+    result = subprocess.run([sys.executable, "-c", code], cwd=REPO, capture_output=True, text=True)
+    loaded = result.stdout.strip()
+    assert loaded == "", f"upload stack imported at boot: {loaded}"
+
+
+def test_langsmith_telemetry_is_disabled_where_the_splitter_is_used():
+    """langchain-core pulls in langsmith, a telemetry client. In a product about document
+    confidentiality, 'it's off by default' is not good enough -- an env var set elsewhere on
+    the host would silently opt us into shipping user documents to a third party."""
+    source = (REPO / "src" / "api" / "uploads.py").read_text()
+    assert 'LANGSMITH_TRACING' in source
+    assert 'LANGCHAIN_TRACING_V2' in source
+
+
+def test_every_app_error_code_is_declared_in_the_literal():
+    """Every AppError subclass's `code` must exist in ErrorCode.
+
+    This test exists because it failed in production first. `AuthRequired` shipped with
+    code 'AUTH_REQUIRED', which was not in the Literal, so building the envelope raised a
+    ValidationError *inside the exception handler* and FastAPI returned 500 -- from the very
+    machinery whose whole job is 'never a 500 with a stack trace'. A 401 became a 500.
+
+    Enumerating subclasses is what makes this un-forgettable: adding an error class with an
+    undeclared code now fails the suite instead of the deployment.
+    """
+    from typing import get_args
+
+    from src.api import auth, errors, uploads  # noqa: F401  (import to register subclasses)
+
+    declared = set(get_args(errors.ErrorCode))
+
+    def subclasses(cls):
+        for sub in cls.__subclasses__():
+            yield sub
+            yield from subclasses(sub)
+
+    for cls in subclasses(errors.AppError):
+        assert cls.code in declared, (
+            f"{cls.__name__}.code = {cls.code!r} is not in ErrorCode. "
+            "The handler would fail validation and return 500 instead of "
+            f"{cls.status_code}."
+        )

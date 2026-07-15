@@ -24,12 +24,39 @@ class Settings(BaseSettings):
     pinecone_api_key: str | None = None
     pinecone_index: str = "eda-kb"
 
+    # Auth gates the UPLOAD surface only. The demo corpus is public and stays public: an
+    # assessment demo behind a login is a demo nobody sees.
+    #
+    # A hash, never a password, and both from the environment -- this repo is public. There
+    # is no user table because there is one account; a database of one row would be
+    # architecture theatre. Generate with:
+    #   python -c "import bcrypt;print(bcrypt.hashpw(b'PW', bcrypt.gensalt(12)).decode())"
+    auth_email: str | None = None
+    auth_password_hash: str | None = None
+    session_secret: str | None = None
+
+    # Bounds on the upload surface. These are not arbitrary -- see api/uploads.py. The box
+    # has 512 MB and the baseline already uses ~435 MB, so an unbounded upload is an OOM,
+    # and an OOM is a dead URL for the reviewer clicking the public demo.
+    max_upload_mb: int = 20
+    max_upload_pages: int = 60
+    max_inmemory_kbs: int = 3
+
     index_dir: str = "index"
     log_level: str = "INFO"
 
     @property
     def generation_available(self) -> bool:
         return bool(self.mistral_api_key)
+
+    @property
+    def auth_available(self) -> bool:
+        return bool(self.auth_email and self.auth_password_hash and self.session_secret)
+
+    @property
+    def uploads_persist(self) -> bool:
+        """Do uploaded KBs survive a restart? Only if they live off-box."""
+        return bool(self.pinecone_api_key)
 
 
 settings = Settings()

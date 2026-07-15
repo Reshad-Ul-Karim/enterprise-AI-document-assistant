@@ -57,20 +57,45 @@ def _canonical(text: str) -> str:
     return re.sub(r"\s+", " ", unicodedata.normalize("NFKC", text)).strip().lower()
 
 
+# Quotation marks the model wraps around its quote. It is quoting, so quoting punctuation is
+# the natural thing to write -- `[[chunk:x|"the text."]]` -- but those characters are NOT part
+# of the span, and matching them literally makes a true quote fail. Observed in production:
+# a correct answer about overtime was refused because the span started with a `"`.
+_WRAPPING_QUOTES = "\"'“”‘’«»"
+
+
+def _strip_wrapping_quotes(quote: str) -> str:
+    """Drop paired quote marks around the span. Only the OUTSIDE -- an apostrophe inside
+    ("worker's") is part of the text and must survive."""
+    text = quote.strip()
+    while len(text) >= 2 and text[0] in _WRAPPING_QUOTES:
+        text = text[1:].strip()
+    while len(text) >= 1 and text[-1] in _WRAPPING_QUOTES:
+        text = text[:-1].strip()
+    return text
+
+
 def _span_pattern(quote: str) -> re.Pattern[str]:
     """A pattern matching the quote in ORIGINAL text with any whitespace between tokens.
 
     The statute is OCR'd from a scan, so line wrapping means a true quote almost never
     matches byte-for-byte. Matching token-wise against flexible whitespace is what lets us
     slice the real span out of the real text.
+
+    Note what is deliberately NOT tolerated: an ellipsis. `"the employer... may... fix"` is
+    the model splicing two distant fragments into one quote, which is exactly the fabrication
+    the span check exists to catch. Tolerating punctuation the model wrapped AROUND a real
+    span is correct; tolerating a span that was never contiguous is not.
     """
-    tokens = _canonical(quote).split()
+    tokens = _canonical(_strip_wrapping_quotes(quote)).split()
+    if not tokens:
+        return re.compile(r"(?!)")  # matches nothing
     return re.compile(r"\s+".join(re.escape(t) for t in tokens), re.I)
 
 
 def verify_span(quote: str, chunk: Chunk) -> bool:
     """Does the quoted span actually appear in the chunk it cites?"""
-    if not _canonical(quote):
+    if not _canonical(_strip_wrapping_quotes(quote)):
         return False
     return _span_pattern(quote).search(chunk.text) is not None
 

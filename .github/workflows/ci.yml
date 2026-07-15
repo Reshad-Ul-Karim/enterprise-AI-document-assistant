@@ -38,11 +38,28 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
       - run: pip install -r requirements.txt
-      - name: assert torch is absent from the runtime closure
+      - name: assert the runtime closure is free of torch and the crash-risk packages
         run: |
-          if pip show torch > /dev/null 2>&1; then
-            echo "::error::torch is in the runtime closure (~2.5 GB). Cold start would suffer."
-            exit 1
-          fi
-          python -c "import importlib.util; assert importlib.util.find_spec('torch') is None"
-          echo "runtime closure is torch-free"
+          for pkg in torch transformers pyarrow tensorflow streamlit; do
+            if pip show "$pkg" > /dev/null 2>&1; then
+              echo "::error::$pkg is in the runtime closure."
+              exit 1
+            fi
+          done
+          echo "runtime closure is clean"
+
+      - name: prove the upload path imports cleanly in the real image environment
+        # This is the check that matters. langchain_text_splitters' __init__ reaches for
+        # transformers when importable; on a box that also has tensorflow/pyarrow it aborts
+        # at the C++ level -- uncatchable by try/except, so it kills the process on the
+        # first upload and takes the public demo with it. Here, in a clean closure, it must
+        # import and split without drama.
+        run: |
+          python - <<'PY'
+          from langchain_text_splitters.character import RecursiveCharacterTextSplitter
+          s = RecursiveCharacterTextSplitter(chunk_size=100, chunk_overlap=20)
+          assert len(s.split_text("word " * 200)) > 1
+          import sys
+          assert "transformers" not in sys.modules, "transformers got imported after all"
+          print("upload path imports cleanly; no transformers")
+          PY

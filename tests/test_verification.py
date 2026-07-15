@@ -121,3 +121,31 @@ def test_stitched_noncontiguous_quote_is_rejected():
     """
     assert verify_span("Every worker shall be entitled", CHUNK)          # contiguous: real
     assert not verify_span("Every worker for ten days in a calendar", CHUNK)  # stitched: fake
+
+
+def test_quotes_wrapped_in_quotation_marks_still_verify():
+    """The model is QUOTING, so it writes quotation marks -- [[chunk:x|"the text."]].
+
+    Those characters are punctuation the model put AROUND the span, not part of it. Matching
+    them literally made a correct answer about overtime pay get refused in production: the
+    span started with a `"` that does not exist in the source.
+    """
+    assert verify_span('"Every worker shall be entitled to casual leave"', CHUNK)
+    assert verify_span("“Every worker shall be entitled”", CHUNK)   # curly quotes too
+    assert verify_span("Every worker shall be entitled", CHUNK)     # and bare
+
+
+def test_an_apostrophe_inside_the_span_is_not_stripped():
+    """Only the OUTSIDE is punctuation. An apostrophe inside a word is the text."""
+    c = Chunk(**{**CHUNK.model_dump(), "text": "the worker's right to leave"})
+    assert verify_span("worker's right", c)
+
+
+def test_an_ellipsis_quote_is_still_rejected():
+    """Tolerating wrapping punctuation must NOT become tolerating elision.
+
+    '"the employer... may... fix time rates"' is the model splicing distant fragments into
+    one quote -- the exact fabrication the span check exists to catch. Observed in
+    production alongside the quotation-mark bug; this one SHOULD fail.
+    """
+    assert not verify_span('"Every worker... casual leave"', CHUNK)

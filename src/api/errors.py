@@ -11,7 +11,7 @@ transport failure, which is how a system gets "fixed" into refusing nothing.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, get_args
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -27,6 +27,8 @@ ErrorCode = Literal[
     "UPLOAD_BACKEND_UNAVAILABLE",
     "INDEX_NOT_LOADED",
     "GENERATION_UNCONFIGURED",
+    "AUTH_REQUIRED",
+    "AUTH_UNCONFIGURED",
 ]
 
 
@@ -82,10 +84,20 @@ class KbNotFound(AppError):
 
 
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:
+    """Build the envelope defensively.
+
+    An earlier version trusted `exc.code` to be in the Literal. It was not -- AuthRequired
+    was added with a code nobody added to ErrorCode -- so ErrorDetail raised a
+    ValidationError INSIDE the handler and FastAPI returned a 500. The error envelope built
+    to prevent 500s produced one. An unknown code is a bug to fix, not a reason to hand the
+    caller a stack trace, so it degrades to a typed envelope and the mismatch is caught by
+    test_every_app_error_code_is_declared instead.
+    """
     request_id = getattr(request.state, "request_id", "unknown")
+    code = exc.code if exc.code in get_args(ErrorCode) else "UPSTREAM_UNAVAILABLE"
     envelope = ErrorEnvelope(
         error=ErrorDetail(
-            code=exc.code,
+            code=code,
             message=exc.message,
             request_id=request_id,
             retry_after_s=exc.retry_after_s,

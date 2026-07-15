@@ -19,3 +19,22 @@ numpy==2.1.1
 rank-bm25==0.2.2
 
 mistralai==1.9.11
+
+# --- upload surface (auth + runtime ingestion) ---
+# pypdf, NOT pymupdf: .importlinter forbids src.api from importing pymupdf, because PyMuPDF
+# is a build-time dependency deliberately absent from the runtime image -- a rule learned
+# when importing it in api/ crashed a deploy on boot. pypdf is pure-python and ~1 MB.
+pypdf==5.6.0
+python-multipart==0.0.20
+bcrypt==4.2.1
+itsdangerous==2.2.0
+
+# The ONLY LangChain package here, and only for uploads. For the statute I know the grammar
+# and measured RecursiveCharacterTextSplitter merging three distinct leave entitlements into
+# one chunk with one wrong page number. For a document uploaded 30s from now I don't know the
+# grammar, and a recursive split IS the honest default. The `langchain` META-PACKAGE is
+# deliberately NOT installed, which makes the rejection structural rather than aspirational.
+langchain-text-splitters==0.3.5
+
+# Uploaded KBs only. Unset PINECONE_API_KEY -> in-memory, ephemeral, stated in the UI.
+pinecone==5.4.2

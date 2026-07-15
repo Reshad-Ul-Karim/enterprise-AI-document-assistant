@@ -13,8 +13,12 @@ from fastapi import FastAPI, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from src.api.auth import AuthRequired, read_session
 from src.api.errors import AppError, GenerationUnconfigured, IndexNotLoaded, app_error_handler
+from src.api.uploads import KbNotFound
+from src.api.kbstore import KbRegistry
 from src.api.rategate import RateGate
+from src.api.routes_kb import router as kb_router
 from src.api.settings import settings
 from src.core.generator import Generator
 from src.core.models import AskRequest, AskResponse
@@ -47,6 +51,7 @@ async def lifespan(app: FastAPI):
         state["error"] = f"{type(exc).__name__}: {exc}"
         _log("index_load_failed", error=state["error"])
 
+    app.state.registry = KbRegistry()
     state["gate"] = RateGate(settings.max_concurrent_requests, settings.requests_per_second)
     if settings.generation_available:
         from src.api.providers.mistral import MistralGenerator
@@ -65,6 +70,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 app.add_exception_handler(AppError, app_error_handler)  # type: ignore[arg-type]
+app.include_router(kb_router)
 
 
 @app.middleware("http")
@@ -108,6 +114,8 @@ async def health() -> JSONResponse:
         # Deliberately a SEPARATE field from index_loaded: Pinecone serves uploads only, so
         # it being unreachable must not imply the baseline demo is down.
         "pinecone_reachable": bool(settings.pinecone_api_key),
+        "auth_configured": settings.auth_available,
+        "uploads_persist": settings.uploads_persist,
         "error": state["error"],
     }
     return JSONResponse(body, status_code=200 if corpus else 503)
@@ -126,8 +134,28 @@ async def ask(request: AskRequest, http_request: Request) -> AskResponse:
 
     corpus = _corpus()
     generator = _generator()
+    registry = http_request.app.state.registry
+
+    # kb_id picks the retriever. 'default' is the public committed corpus (a file, no
+    # network, no auth); anything else is an uploaded KB. Asking an uploaded KB requires a
+    # session, because it is not public data.
+    kb_retriever = None
+    if request.kb_id != "default":
+        if not read_session(http_request):
+            raise AuthRequired("Sign in to query an uploaded knowledge base.")
+        if request.kb_id not in registry.kbs:
+            raise KbNotFound(f"No knowledge base {request.kb_id!r}.")
+        kb_retriever = registry.retrievers[request.kb_id]
+
     async with state["gate"]:  # type: ignore[misc]
-        response = answer(request.question, corpus, generator, section_no=request.section_no)
+        response = answer(
+            request.question,
+            corpus,
+            generator,
+            section_no=request.section_no,
+            history=request.history,
+            kb_retriever=kb_retriever,
+        )
     _log(
         "ask",
         request_id=getattr(http_request.state, "request_id", None),
