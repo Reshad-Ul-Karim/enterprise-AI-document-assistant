@@ -330,7 +330,7 @@ a refactor.
 | | |
 |---|---|
 | Email | `reshad.sazid@gmail.com` |
-| Password | `aireshaddocument1234` |
+| Password | `* email here to get the password ` |
 
 A throwaway demo credential that protects nothing valuable. The server stores only a **bcrypt hash**, in
 an environment variable; no plaintext and no hash is in this repo. There's no user table, because there's
