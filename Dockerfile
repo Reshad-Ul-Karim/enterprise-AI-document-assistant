@@ -54,6 +54,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # not just editing the manifest -- and the Dockerfile is code the local test suite never runs.
 
 COPY index/ ./index/
+# Persona corpus (reshadulkarim.me's "Ask Reshad" widget) -- a second, independently-built
+# index alongside the HR one (see docs/AI_ASSISTANT_PLAN.md sec.4, "same service, second
+# corpus"). main.py's lifespan treats a missing index_persona/ as a supported state (loads
+# the HR corpus and logs "persona_index_absent" rather than failing the boot), which is
+# exactly what silently happened here before this line existed -- the directory was never
+# copied into the image at all, so persona never loaded on a real deploy even though it
+# worked locally.
+COPY index_persona/ ./index_persona/
 COPY prompts/ ./prompts/
 COPY static/ ./static/
 COPY src/ ./src/
