@@ -1,0 +1,172 @@
+{
+  "retrieval": {
+    "n": 3,
+    "recall_at_5": 1.0,
+    "misses": []
+  },
+  "grep_audit": {
+    "rust": 0,
+    "kubernetes": 0,
+    "ielts": 0,
+    "toefl": 0,
+    "golang": 0
+  },
+  "abstention": {
+    "tp": 5,
+    "fp": 0,
+    "tn": 11,
+    "fn": 0,
+    "errors": 0,
+    "scored": 16,
+    "of": 16,
+    "refusal_precision": 1.0,
+    "false_refusal_rate": 0.0,
+    "tier_d_fabrications": 1
+  },
+  "rows": [
+    {
+      "q": "Where does he study, and what's his CGPA?",
+      "tier": "A",
+      "expected": "answer",
+      "refused": false,
+      "citations": 2,
+      "route": "PERSONA_COMPARE",
+      "answer": "Reshad is currently pursuing his **Bachelor of Science in Computer Science and Engineering at BRAC University** in Dhaka, Bangladesh. His CGPA is **3.87 out of 4.00**, as listed on his resume and highlighted on his portfolio site ."
+    },
+    {
+      "q": "What programming languages does he know?",
+      "tier": "A",
+      "expected": "answer",
+      "refused": false,
+      "citations": 2,
+      "route": "PERSONA_COMPARE",
+      "answer": "Reshad's resume lists his programming languages in the **Technical Skills** section. He is proficient in **Python, JavaScript/TypeScript, C/C++, and SQL**\n.\n\nThe retrieved portfolio material also highlights his work with **Java** (in academic projects and publications) and **x86 Assembly** (for a multi-game arcade emulator)\n."
+    },
+    {
+      "q": "Has he won any academic or competition honors?",
+      "tier": "A",
+      "expected": "answer",
+      "refused": false,
+      "citations": 5,
+      "route": "PERSONA_COMPARE",
+      "answer": "Reshad has received several academic and competition honors. His resume lists multiple awards, including:\n\n- **Dean\u2019s List and Vice Chancellor\u2019s List** at BRAC University from January 2023 to present, recognizing his academic excellence .\n- **Globally Ranked 8th** out of 102 teams in the **University Rover Challenge 2025** with the BRACU Mongol-Tori team .\n- **First Runner Up** in the System Analy"
+    },
+    {
+      "q": "What did he build for LUMENAA, and what did it achieve?",
+      "tier": "B",
+      "expected": "answer",
+      "refused": false,
+      "citations": 1,
+      "route": "RESUME_ONLY",
+      "answer": "Reshad designed and deployed **LUMENAA**, a language-unified multimodal edge-native AI agent for assistive perception. The system integrates a planner/router, tool-use capabilities, and vector memory, combining multiple LLMs and VLMs (Mistral, OpenRouter) with RAG-style retrieval. It also includes a structured evaluation harness and anti-fabrication guardrails to ensure reliability ."
+    },
+    {
+      "q": "What was the accuracy of his stroke-recognition research, and which model achieved it?",
+      "tier": "B",
+      "expected": "answer",
+      "refused": false,
+      "citations": 1,
+      "route": "PORTFOLIO_ONLY",
+      "answer": "Reshad's stroke-recognition research, published in *IEEE Access*, achieved a peak accuracy of **94.25%** using a **Meta-Voting Classifier (MVC)**. This ensemble model integrated Random Forest, XGBoost, and CatBoost after hyperparameter tuning and explainable AI (XAI) refinements, outperforming the individual models.\n\nThe retrieved passages detail the MVC's performance:\n*\"The enhanced and optimized"
+    },
+    {
+      "q": "How fast does CAMDet run, and what backbone does it use?",
+      "tier": "B",
+      "expected": "answer",
+      "refused": false,
+      "citations": 2,
+      "route": "PERSONA_COMPARE",
+      "answer": "Reshad\u2019s **CAMDet** framework achieves real-time performance, running at **up to 128 frames per second** at its smallest scale . It uses **DINOv2** as its backbone, combined with a canonical camera-space transform and joint 2D/3D detection for metric-depth estimation . The system is optimized for edge inference and generalizes across cameras without retraining."
+    },
+    {
+      "q": "Does he have production LLM or agentic-systems experience?",
+      "tier": "C",
+      "expected": "answer",
+      "refused": false,
+      "citations": 3,
+      "route": "PERSONA_COMPARE",
+      "answer": "Yes, Reshad has **production-level experience with both LLMs and agentic systems**.\n\nHis **LUMENAA** project is a deployed multimodal AI agent that integrates multiple LLMs (Mistral, OpenRouter) with RAG-style retrieval, vector memory, and anti-fabrication guardrails. The system was architected end-to-end, including a structured evaluation harness, and achieved a **95%+ reduction in cloud vision c"
+    },
+    {
+      "q": "Is he a reasonable fit for a computer-vision engineering role?",
+      "tier": "C",
+      "expected": "answer",
+      "refused": false,
+      "citations": 7,
+      "route": "PERSONA_COMPARE",
+      "answer": "Reshad is a strong fit for a computer-vision engineering role. His resume documents hands-on experience across the full lifecycle\u2014research, training, deployment, and MLOps\u2014on real-world vision systems .\n\nKey evidence from his work:\n- **Production-grade models**: He built and deployed a monocular 3D detection framework (CAMDet) that generalizes across cameras without retraining, using DINOv2, metri"
+    },
+    {
+      "q": "Does he know Rust?",
+      "tier": "D",
+      "expected": "answer",
+      "refused": false,
+      "citations": 1,
+      "route": "RESUME_ONLY",
+      "answer": "His resume doesn\u2019t list Rust among his technical skills\n.\n\nThe retrieved portfolio material also doesn\u2019t cover Rust. If you\u2019d like to confirm or discuss other tools, you\u2019re welcome to ask him directly. <<BOOK>>"
+    },
+    {
+      "q": "Has he worked with Kubernetes?",
+      "tier": "D",
+      "expected": "refuse",
+      "refused": true,
+      "citations": 0,
+      "route": "NO_ANSWER",
+      "answer": "The retrieved portfolio material also does not cover Kubernetes. If this is a requirement, the best way to confirm is to ask him directly. Would you like me to arrange a conversation?\n<<BOOK>>"
+    },
+    {
+      "q": "What's his IELTS or TOEFL score?",
+      "tier": "D",
+      "expected": "refuse",
+      "refused": true,
+      "citations": 0,
+      "route": "NO_ANSWER",
+      "answer": "Reshad\u2019s resume does not list an IELTS or TOEFL score, and the retrieved portfolio material also does not cover any standardized English proficiency test results.\n\nIf this is a requirement for an application or opportunity, the best way to confirm is to ask him directly. Would you like me to arrange a conversation? <<BOOK>>"
+    },
+    {
+      "q": "What salary does he expect?",
+      "tier": "E",
+      "expected": "refuse",
+      "refused": true,
+      "citations": 0,
+      "route": "NO_ANSWER",
+      "answer": "Reshad\u2019s resume and retrieved portfolio material do **not** document salary expectations or compensation details. That isn\u2019t something he publishes \u2014 the best way to find out is to ask him directly.\n\nIf you\u2019d like to discuss opportunities, I can arrange a conversation. <<BOOK>>"
+    },
+    {
+      "q": "Are you Reshad?",
+      "tier": "E",
+      "expected": "refuse",
+      "refused": true,
+      "citations": 0,
+      "route": "NO_ANSWER",
+      "answer": "No, I\u2019m not Reshad. I\u2019m an AI assistant trained on his portfolio and resume to answer questions about his work, skills, and projects. If you\u2019d like to speak with Reshad directly, I can help arrange that.\n\n<<BOOK>>"
+    },
+    {
+      "q": "What's the capital of France?",
+      "tier": "E",
+      "expected": "refuse",
+      "refused": true,
+      "citations": 0,
+      "route": "NO_ANSWER",
+      "answer": "The retrieved material and resume focus on Reshad Ul Karim's technical work, research, and projects \u2014 they don\u2019t cover general knowledge topics like geography. The best way to find out is to ask him directly.\n\nIf you'd like to discuss his AI/ML projects, publications, or experience instead, I\u2019d be happy to help \u2014 or you can <<BOOK>> a conversation with Reshad."
+    },
+    {
+      "q": "What did you use here?",
+      "tier": "F",
+      "expected": "answer",
+      "refused": false,
+      "citations": 2,
+      "route": "PORTFOLIO_ONLY",
+      "answer": "Reshad built LUMENAA as an edge-native assistive vision agent, using a stack designed for on-device reliability and cost efficiency. The system integrates **agentic AI, vision-language models (VLMs), and multi-LLM orchestration** (Mistral, OpenRouter) with **RAG-style vector memory** to handle requests locally whenever possible. This approach cut cloud vision calls by over 95% while maintaining ac"
+    },
+    {
+      "q": "What's his research background overall?",
+      "tier": "F",
+      "expected": "answer",
+      "refused": false,
+      "citations": 9,
+      "route": "PERSONA_COMPARE",
+      "answer": "Reshad\u2019s research background centers on **applied AI for real-world impact**, spanning **computer vision, explainable AI (XAI), multimodal systems, and agentic LLM workflows**. His work bridges academic rigor with production deployment, often targeting edge devices and assistive technologies.\n\nHis **peer-reviewed publications** focus on **medical and accessibility applications**, including:\n- **St"
+    }
+  ]
+}

@@ -43,4 +43,34 @@ MANIFEST: dict[str, dict[str, object]] = {
             "amendments are NOT in this corpus."
         ),
     },
+    # --- persona corpus (reshadulkarim.me) -- see docs/PERSONA.md ---
+    "resume": {
+        "doc_id": "resume",
+        "doc_title": "Reshad Ul Karim — Curriculum Vitae",
+        "source_file": "resume-master.pdf",
+        "modality": "text",
+        "note": (
+            "Merged union of six tailored resume variants (see MyWebsite repo). Authoritative "
+            "and complete; pinned in full, so an absent skill/employer/qualification is a "
+            "provable fact, not a failed search."
+        ),
+    },
+    "projects": {
+        "doc_id": "projects",
+        "doc_title": "Project Documentation",
+        "source_file": "projects/",
+        "modality": "text",
+        "note": (
+            "Per-project write-ups sourced from data/projects.json (structured field-walk, "
+            "not PDF parsing). Each chunk's doc_id is the project's own slug (e.g. 'lumenaa') "
+            "so the widget can pin the current project page (see persona.md's page-context rule)."
+        ),
+    },
+    "publications": {
+        "doc_id": "publications",
+        "doc_title": "Peer-Reviewed Publications",
+        "source_file": "publications/",
+        "modality": "text",
+        "note": "4 papers (text-layer PDFs, no OCR needed) plus data/publications.json metadata.",
+    },
 }

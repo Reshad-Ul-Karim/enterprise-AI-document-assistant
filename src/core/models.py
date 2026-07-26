@@ -13,7 +13,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-DocKind = Literal["handbook", "statute", "uploaded"]
+DocKind = Literal["handbook", "statute", "uploaded", "resume", "portfolio"]
 Modality = Literal["text", "ocr"]
 
 
@@ -70,6 +70,14 @@ class Citation(BaseModel):
                 f"{self.doc_title}, s.{self.section_no} {self.section_title} "
                 f"— printed p.{self.printed_page} (PDF page {self.pdf_page} of 181)"
             )
+        if self.doc_kind in ("resume", "portfolio"):
+            # Markdown-sourced persona chunks have no real pagination (see chunk_markdown,
+            # zero_based_pdf_index/printed_page are both 1) -- the section heading is the
+            # only stable, human-readable anchor. PDF-sourced ones (papers) do have a real
+            # printed page, so fall back to it when there's no heading.
+            if self.section_title:
+                return f"{self.doc_title} — {self.section_title}"
+            return f"{self.doc_title} — p.{self.printed_page}"
         if self.half:
             return (
                 f"{self.doc_title}, printed p.{self.printed_page} "
@@ -91,12 +99,43 @@ class Turn(BaseModel):
     answer: str = Field(max_length=8000)
 
 
+class PageContext(BaseModel):
+    """Which page the visitor is standing on, for the persona corpus (see prompts/persona.md).
+
+    The site's routes map 1:1 onto corpus doc_ids (gen_pages.py builds every page from
+    `slug`), so `slug` is looked up directly against Chunk.doc_id to pin the current page's
+    chunks alongside the resume -- bias, don't confine (see persona.md's page-context rule).
+    """
+
+    model_config = ConfigDict(frozen=True)
+    kind: Literal["project", "publication", "index", "home"] = "home"
+    slug: str | None = None
+    title: str | None = None
+
+
 class AskRequest(BaseModel):
     question: str = Field(min_length=3, max_length=1000)
     kb_id: str = "default"
+    corpus: Literal["hr", "persona"] = "hr"
     doc_filter: Literal["handbook", "statute"] | None = None
     section_no: int | None = Field(default=None, ge=1, le=354)  # a free 422 on nonsense
     history: list[Turn] = Field(default_factory=list, max_length=10)
+    page: PageContext | None = None  # persona corpus only; ignored otherwise
+
+
+class BookRequest(BaseModel):
+    """A visitor asking to talk to Reshad directly (see prompts/persona.md's <<BOOK>> marker
+    and docs/AI_ASSISTANT_PLAN.md sec.6). `website` is a honeypot: a real visitor never sees
+    or fills this field (CSS-hidden in the widget), so a non-empty value is a bot signal --
+    routes_book.py accepts the request but silently discards it rather than sending mail."""
+
+    name: str = Field(min_length=1, max_length=120)
+    email: str = Field(min_length=3, max_length=254)
+    purpose: str = Field(min_length=1, max_length=2000)
+    preferred_times: str = Field(default="", max_length=300)
+    website: str = Field(default="", max_length=200)  # honeypot
+    page: PageContext | None = None
+    recent_history: list[Turn] = Field(default_factory=list, max_length=3)
 
 
 class AskResponse(BaseModel):

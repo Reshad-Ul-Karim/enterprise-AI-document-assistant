@@ -10,7 +10,7 @@ test_similarity_threshold_is_an_antisignal in tests/test_retrieval_quality.py.
 
 from __future__ import annotations
 
-from src.core.models import Chunk
+from src.core.models import Chunk, Citation
 from src.core.verification import derive_route, verify_answer, verify_span
 
 CHUNK = Chunk(
@@ -92,6 +92,41 @@ def test_route_is_derived_in_code_not_by_a_model():
     )
     assert derive_route(citations) == "STATUTE_ONLY"
     assert derive_route([]) == "NO_ANSWER"
+
+
+def test_a_faithful_quote_with_a_short_abbreviation_is_not_falsely_rejected():
+    """Regression for a real false refusal: asked "Where does he study, and what's his
+    CGPA?", the model correctly quoted the resume verbatim including "BSc." -- but the
+    source-side tokenizer stripped the period ("bsc." -> "bsc") while the quote-side
+    tokenizer did not, so "BSc." could never equal "bsc" (both under _FUZZY_MIN_LEN=4,
+    where the digit-confusion guard forces exact matching). A completely faithful quote was
+    silently discarded and the answer came back "Not found in the provided documents." --
+    caught by running the real pipeline against a real question, not by reading the code."""
+    chunk = Chunk(
+        chunk_id="resume:education:0:0", doc_id="resume", doc_title="Resume", doc_kind="resume",
+        text="BSc. in Computer Science and Engineering, BRAC University 09/2022 - Present\n"
+             "CGPA: 3.87/4.00 Completed Credits: 120",
+        section_title="EDUCATION", zero_based_pdf_index=0, printed_page=1, source_modality="text",
+    )
+    quote = "BSc. in Computer Science and Engineering, BRAC University 09/2022 - Present"
+    assert verify_span(quote, chunk) is True
+
+
+def test_persona_route_labels_are_not_mislabelled_as_uploaded_kb():
+    """Before this branch existed, a persona-corpus citation set fell through to the catch-all
+    'UPLOADED_KB' label -- misleading, since nothing was uploaded. Caught by exercising the
+    function with persona doc_kinds, not by reading the code."""
+    resume_citation = Citation(
+        doc_id="resume", doc_title="Resume", doc_kind="resume", printed_page=1, pdf_page=0,
+        snippet="Python", source_modality="text",
+    )
+    portfolio_citation = Citation(
+        doc_id="lumenaa", doc_title="LUMENAA", doc_kind="portfolio", printed_page=1, pdf_page=0,
+        snippet="cut cloud calls", source_modality="text",
+    )
+    assert derive_route([resume_citation]) == "RESUME_ONLY"
+    assert derive_route([portfolio_citation]) == "PORTFOLIO_ONLY"
+    assert derive_route([resume_citation, portfolio_citation]) == "PERSONA_COMPARE"
 
 
 def test_model_can_declare_insufficiency_while_keeping_related_sources():

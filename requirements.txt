@@ -23,6 +23,13 @@ rank-bm25==0.2.2
 
 mistralai==1.9.11
 
+# --- /api/book (see src/api/providers/resend.py) ---
+# One POST to Resend's HTTP API -- no Resend SDK, same "one dependency per real need"
+# philosophy as skipping a Mistral wrapper. Pinned to match requirements-dev.txt's version
+# so the eval harness's Gemini judge (which also uses httpx) and this share one resolved
+# version instead of two.
+httpx==0.28.1
+
 # --- upload surface (auth + runtime ingestion) ---
 # pypdf, NOT pymupdf: .importlinter forbids src.api from importing pymupdf, because PyMuPDF
 # is a build-time dependency deliberately absent from the runtime image -- a rule learned

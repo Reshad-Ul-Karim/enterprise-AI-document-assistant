@@ -29,3 +29,15 @@ services:
         # Observed, not published: at 1.0 Mistral's free tier 429s in a storm. See
         # src/api/settings.py. Raise it only with logs showing no 429s.
         value: "0.4"
+      # --- persona corpus (reshadulkarim.me widget) -- see docs/AI_ASSISTANT_PLAN.md ---
+      # index_persona/ must be committed (same as index/) for Corpus to find it at boot;
+      # build it locally first with `python -m src.ingest.build_persona_index` (needs
+      # PINECONE_API_KEY and a checkout of the MyWebsite repo as a sibling directory, or
+      # PERSONA_SITE_REPO pointed at wherever it lives -- both build-time only, neither
+      # belongs in this deployed service's env).
+      - key: CORS_ALLOW_ORIGINS
+        value: https://reshadulkarim.me
+      - key: RESEND_API_KEY
+        sync: false           # set in the Render dashboard; NEVER committed
+      - key: OWNER_EMAIL
+        sync: false           # Reshad's real inbox; not committed even though not a secret

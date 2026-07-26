@@ -77,6 +77,11 @@ def _strip_wrapping_quotes(quote: str) -> str:
 
 _WORD_RE = re.compile(r"\S+")
 
+# Edge punctuation stripped from EVERY token before comparison, on both the quote side and
+# the source side (see find_span) -- applying it to only one side is the bug find_span's
+# docstring now explains.
+_EDGE_PUNCT = ".,;:()[]\"'"
+
 # Fuzzy tolerance, and the exact reason for it. MEASURED: asked for the festival-holiday
 # entitlement, the model quoted
 #     "Every worker shall be allowed in a calendar year eleven days of paid festival holidays"
@@ -144,10 +149,20 @@ def find_span(quote: str, text: str) -> tuple[int, int] | None:
     which is the fabrication this check exists to catch. Forgiving the scan's typos is not
     the same as forgiving invention.
     """
-    q = _canonical(_strip_wrapping_quotes(quote)).split()
+    # Both sides must be tokenized THE SAME WAY, or the comparison is meaningless. The
+    # source side stripped edge punctuation per token; the quote side did not -- found by
+    # actually running the pipeline against a real question, not by reading the code: "BSc."
+    # (the model's faithful quote) could never equal "bsc" (the source token, comma/period
+    # stripped) because both are under _FUZZY_MIN_LEN=4, where the digit-confusion guard
+    # forces exact matching. A completely correct quote was silently discarded on a
+    # two-clause question ("Where does he study, and what's his CGPA?"), producing a false
+    # refusal for a directly-answerable question -- the same class of failure as the
+    # skill-table spacing bug, just on the other side of the same comparison.
+    q = [t.strip(_EDGE_PUNCT) for t in _canonical(_strip_wrapping_quotes(quote)).split()]
+    q = [t for t in q if t]
     if not q:
         return None
-    spans = [(m.group(0).lower().strip(".,;:()[]\"'"), m.start(), m.end())
+    spans = [(m.group(0).lower().strip(_EDGE_PUNCT), m.start(), m.end())
              for m in _WORD_RE.finditer(unicodedata.normalize("NFKC", text))]
     if len(spans) < len(q):
         return None
@@ -351,4 +366,10 @@ def derive_route(citations: list[Citation]) -> str:
         return "STATUTE_ONLY"
     if {"handbook", "statute"} <= kinds:
         return "COMPARE"
+    if kinds == {"resume"}:
+        return "RESUME_ONLY"
+    if kinds == {"portfolio"}:
+        return "PORTFOLIO_ONLY"
+    if {"resume", "portfolio"} <= kinds:
+        return "PERSONA_COMPARE"
     return "UPLOADED_KB"

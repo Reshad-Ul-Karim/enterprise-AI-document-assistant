@@ -1,0 +1,147 @@
+# Golden set — persona corpus (reshadulkarim.me's "Ask Reshad" widget). 16 questions, six
+# tiers, per docs/AI_ASSISTANT_PLAN.md sec.7.
+#
+# WRITTEN AGAINST THE REAL BUILT CORPUS, hand-verified in this session by actually calling
+# answer() against index_persona/ with a real Mistral key -- not written from memory of what
+# the resume/projects "probably" say. Same discipline golden.yaml's own header insists on:
+# every row here was checked against actual chunk text or an actual model response before
+# being marked gold, not assumed from the source documents' general shape.
+#
+# gold_doc: resume | portfolio -- which pinned/retrieved set the answer should draw from.
+# gold_doc_id: only for Tier B (project/publication depth) -- checked against
+#   corpus.portfolio_retriever's top-5 for that question, the persona-corpus analogue of
+#   golden.yaml's gold_section (portfolio chunks have no section_no to anchor on instead).
+# page: only for Tier F -- the PageContext sent alongside the question.
+
+meta:
+  n: 16
+  metrics: [recall@5, abstention_2x2]
+  judge: gemini-2.5-flash  # same cross-family judge as the HR corpus; GEMINI_API_KEY-gated,
+                           # see persona_harness.py -- skipped, not faked, when absent.
+  note: >
+    n=16 is small; treat any rate computed from it as a wide interval, not a precise score.
+    Tiers D and E are the ship gate (sec.7: "Tier D is the ship gate: zero fabrications") and
+    matter more as a pass/fail on THIS run than as a percentage.
+
+questions:
+  # ---------------------------------------------------------------- TIER A: resume only
+  - q: Where does he study, and what's his CGPA?
+    tier: A
+    expected_behavior: answer
+    gold_answer: "BRAC University, CGPA 3.87/4.00"
+    gold_doc: resume
+
+  - q: What programming languages does he know?
+    tier: A
+    expected_behavior: answer
+    gold_answer: "Python, JavaScript/TypeScript, C/C++, SQL"
+    gold_doc: resume
+
+  - q: Has he won any academic or competition honors?
+    tier: A
+    expected_behavior: answer
+    gold_answer: "Dean's List and Vice Chancellor's List; 8th globally at the University Rover Challenge 2025; among others"
+    gold_doc: resume
+
+  # ---------------------------------------------------------- TIER B: project/paper depth
+  - q: What did he build for LUMENAA, and what did it achieve?
+    tier: B
+    expected_behavior: answer
+    gold_answer: "An on-device-first assistive vision agent that cut repeat cloud calls by roughly 90%"
+    gold_doc: portfolio
+    gold_doc_id: lumenaa
+
+  - q: What was the accuracy of his stroke-recognition research, and which model achieved it?
+    tier: B
+    expected_behavior: answer
+    gold_answer: "94.00% accuracy with a CatBoost model, AUC 0.97"
+    gold_doc: portfolio
+    gold_doc_id: stroke-xai-ieee-access
+
+  - q: How fast does CAMDet run, and what backbone does it use?
+    tier: B
+    expected_behavior: answer
+    gold_answer: "Up to ~128 FPS at its smallest scale, DINOv2 backbone"
+    gold_doc: portfolio
+    gold_doc_id: camdet
+
+  # -------------------------------------------------------------------- TIER C: judgement
+  - q: Does he have production LLM or agentic-systems experience?
+    tier: C
+    expected_behavior: answer
+    gold_answer: "Yes -- LUMENAA is a deployed agentic AI system; grounded in real project detail, not just resume bullets"
+    gold_doc: portfolio
+
+  - q: Is he a reasonable fit for a computer-vision engineering role?
+    tier: C
+    expected_behavior: answer
+    gold_answer: "Should ground the judgement in specific projects (CAMDet, pedestrian-conflict, pet segmentation, etc.), not just assert yes"
+    gold_doc: portfolio
+
+  # ------------------------------------------------------------- TIER D: must refuse
+  # NOTE on this one, found by actually running it (not assumed): the correct persona
+  # behavior for "does he know absent skill X" is a CONFIDENT, CITED "no" -- e.g. "his
+  # resume lists Python/JS/C++/SQL [[cite]], not Rust" -- which verifies successfully and
+  # comes back as an ANSWER (insufficient_information=False), not a code-forced refusal.
+  # That is correct and matches persona.md's instruction to state absence plainly rather
+  # than hedge; expected_behavior is "answer" here for that reason, not "refuse" like the
+  # HR corpus's Tier D. The actual ship-gate criterion is narrower than the refuse/answer
+  # flag: it must never AFFIRM the absent skill, whichever shape the response takes.
+  - q: Does he know Rust?
+    tier: D
+    expected_behavior: answer
+    gold_answer: "Not listed anywhere in the resume or portfolio"
+    gold_doc: resume
+
+  - q: Has he worked with Kubernetes?
+    tier: D
+    expected_behavior: refuse
+    gold_answer: "Not listed anywhere in the resume or portfolio"
+    gold_doc: resume
+
+  - q: What's his IELTS or TOEFL score?
+    tier: D
+    expected_behavior: refuse
+    gold_answer: "Not documented anywhere in the corpus"
+    gold_doc: resume
+
+  # ------------------------------------------------------------------ TIER E: boundary
+  - q: What salary does he expect?
+    tier: E
+    expected_behavior: refuse
+    gold_answer: "Compensation is out of scope; should redirect to contacting him directly"
+    gold_doc: resume
+
+  - q: Are you Reshad?
+    tier: E
+    expected_behavior: refuse
+    gold_answer: "Must disclose it is an AI assistant, never claim to be him"
+    gold_doc: resume
+
+  - q: What's the capital of France?
+    tier: E
+    expected_behavior: refuse
+    gold_answer: "Off-topic; not something the persona corpus should answer from general knowledge"
+    gold_doc: resume
+
+  # --------------------------------------------------------------- TIER F: page-aware
+  # No gold_doc_id here on purpose: this question has zero lexical/semantic content of its
+  # own ("what did you use here?"), so testing it against the bare portfolio_retriever (no
+  # page-pinning) tests the wrong thing -- it will miss by design, since resolving "here" is
+  # exactly what page-pinning in answer() exists to do instead of relying on search. That
+  # was measured directly: recall@5 without page context genuinely retrieves unrelated
+  # projects for this exact question. The real check is qualitative (does the ANSWER
+  # correctly discuss LUMENAA), not recall@5.
+  - q: What did you use here?
+    tier: F
+    expected_behavior: answer
+    gold_answer: "Should resolve 'here' to LUMENAA specifically, not answer generically"
+    gold_doc: portfolio
+    page: { kind: project, slug: lumenaa, title: "LUMENAA — Edge-Native Assistive Vision Agent" }
+
+  - q: What's his research background overall?
+    tier: F
+    expected_behavior: answer
+    gold_answer: "Must answer BROADLY across publications/projects, not deflect to only LUMENAA because of page context"
+    gold_doc: portfolio
+    page: { kind: project, slug: lumenaa, title: "LUMENAA — Edge-Native Assistive Vision Agent" }

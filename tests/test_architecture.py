@@ -121,7 +121,7 @@ def test_every_app_error_code_is_declared_in_the_literal():
     """
     from typing import get_args
 
-    from src.api import auth, errors, uploads  # noqa: F401  (import to register subclasses)
+    from src.api import auth, errors, routes_book, uploads  # noqa: F401  (import to register subclasses)
 
     declared = set(get_args(errors.ErrorCode))
 

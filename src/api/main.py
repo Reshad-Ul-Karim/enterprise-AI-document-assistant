@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
@@ -20,6 +21,7 @@ from src.api.uploads import KbNotFound
 from src.api.kbstore import KbRegistry
 from src.api.memguard import MEMORY_LIMIT_MB, current_rss_mb
 from src.api.rategate import RateGate, estimate_tokens
+from src.api.routes_book import router as book_router
 from src.api.routes_kb import router as kb_router
 from src.api.settings import settings
 from src.core.generator import Generator
@@ -37,7 +39,14 @@ def _log(event: str, **fields: object) -> None:
     log.info(json.dumps({"event": event, **fields}))
 
 
-state: dict[str, object] = {"corpus": None, "generator": None, "gate": None, "error": None}
+state: dict[str, object] = {
+    "corpus": None,
+    "corpus_persona": None,
+    "generator": None,
+    "gate": None,
+    "error": None,
+    "error_persona": None,
+}
 
 
 @asynccontextmanager
@@ -52,6 +61,20 @@ async def lifespan(app: FastAPI):
         # diagnosis, not a blank page.
         state["error"] = f"{type(exc).__name__}: {exc}"
         _log("index_load_failed", error=state["error"])
+
+    persona_dir = REPO / settings.persona_index_dir
+    if persona_dir.exists():
+        try:
+            state["corpus_persona"] = Corpus(persona_dir)
+            _log("persona_index_loaded", chunks=len(state["corpus_persona"].chunks))  # type: ignore[union-attr]
+        except Exception as exc:
+            # Best-effort and SEPARATE from the HR error: a broken persona build must never
+            # take the HR demo down with it, and vice versa -- they are two independent
+            # corpora sharing one process, not one corpus with two names.
+            state["error_persona"] = f"{type(exc).__name__}: {exc}"
+            _log("persona_index_load_failed", error=state["error_persona"])
+    else:
+        _log("persona_index_absent", path=str(persona_dir))
 
     app.state.registry = KbRegistry()
     # Restore uploaded notebooks from Pinecone. Persisting vectors while forgetting the
@@ -80,6 +103,21 @@ app = FastAPI(
 )
 app.add_exception_handler(AppError, app_error_handler)  # type: ignore[arg-type]
 app.include_router(kb_router)
+app.include_router(book_router)
+
+if settings.cors_origins:
+    # Same-origin-only until now: static/app.js has always been served from this app's own
+    # origin (app.mount("/static", ...) below), so no CORSMiddleware existed. The persona
+    # widget on reshadulkarim.me is a genuinely different origin calling this API, hence a
+    # real (not copy-pasted) CORS config -- gated behind an env var so the HR demo's origin
+    # policy is unchanged for anyone who never sets CORS_ALLOW_ORIGINS.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings.cors_origins,
+        allow_methods=["POST", "GET"],
+        allow_headers=["Content-Type"],
+        allow_credentials=False,  # the persona corpus is public; no cookies cross this boundary
+    )
 
 
 @app.middleware("http")
@@ -94,6 +132,14 @@ def _corpus():
     if state["corpus"] is None:
         raise IndexNotLoaded(state["error"] or "Index not loaded.")
     return state["corpus"]
+
+
+def _corpus_persona():
+    if state["corpus_persona"] is None:
+        raise IndexNotLoaded(
+            state["error_persona"] or "Persona index not loaded (has it been built yet?)."
+        )
+    return state["corpus_persona"]
 
 
 def _generator() -> Generator:
@@ -113,11 +159,21 @@ def _generator() -> Generator:
 @app.api_route("/health", methods=["GET", "HEAD"])
 async def health() -> JSONResponse:
     corpus = state["corpus"]
+    persona = state["corpus_persona"]
     body = {
         "status": "ok" if corpus else "degraded",
         "index_loaded": corpus is not None,
         "chunk_count": len(corpus.chunks) if corpus else 0,  # type: ignore[union-attr]
         "index_version": corpus.meta["index_version"] if corpus else None,  # type: ignore[union-attr]
+        # Deliberately not folded into the fields above: the HR demo's health is the
+        # long-standing contract an uptime monitor already parses, and the persona corpus is
+        # optional/additive, so it gets its own namespaced sub-object instead of changing
+        # the meaning of an existing field.
+        "persona": {
+            "index_loaded": persona is not None,
+            "chunk_count": len(persona.chunks) if persona else 0,  # type: ignore[union-attr]
+            "error": state["error_persona"],
+        },
         "model_id": settings.mistral_model,
         "generation_configured": settings.generation_available,
         # Deliberately a SEPARATE field from index_loaded: Pinecone serves uploads only, so
@@ -143,7 +199,11 @@ async def documents() -> dict[str, object]:
 async def ask(request: AskRequest, http_request: Request) -> AskResponse:
     from src.api.service import answer
 
-    corpus = _corpus()
+    # 'corpus' picks WHICH pinned/retrieved pair this request answers against -- "hr" (the
+    # original handbook+statute demo) or "persona" (reshadulkarim.me's resume+portfolio).
+    # kb_id below is an orthogonal axis (an uploaded KB within whichever corpus is active);
+    # it is only meaningful for "hr" today, since the persona corpus has no upload surface.
+    corpus = _corpus_persona() if request.corpus == "persona" else _corpus()
     generator = _generator()
     registry = http_request.app.state.registry
 
@@ -186,6 +246,7 @@ async def ask(request: AskRequest, http_request: Request) -> AskResponse:
             section_no=request.section_no,
             history=request.history,
             kb_retriever=kb_retriever,
+            page=request.page,
         )
     _log(
         "ask",

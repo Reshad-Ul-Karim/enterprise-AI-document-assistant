@@ -1,0 +1,14 @@
+{
+  "index_version": "1.0.0",
+  "embed_model_id": "llama-text-embed-v2",
+  "embed_dim": 1024,
+  "query_input_type": "query",
+  "chunker_version": "1.0.0",
+  "chunk_count": 330,
+  "source_sha256": {
+    "resume": "8bfe3dfe0ef51f1d",
+    "projects_json": "697878cb3fde311f",
+    "publications_json": "efba46f873ce02d1"
+  },
+  "index_bytes": 1351680
+}

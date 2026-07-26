@@ -6,7 +6,7 @@ pymupdf==1.26.6
 mistral-common[sentencepiece]==1.11.5
 
 pytest==8.4.2
-httpx==0.28.1
+# httpx now comes from requirements.txt (runtime dep of src/api/providers/resend.py)
 import-linter==2.5
 ruff==0.9.6
 PyYAML==6.0.2

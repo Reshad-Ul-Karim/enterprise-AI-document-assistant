@@ -30,6 +30,7 @@ ErrorCode = Literal[
     "AUTH_REQUIRED",
     "AUTH_UNCONFIGURED",
     "INSUFFICIENT_MEMORY",
+    "BOOKING_RATE_LIMITED",
 ]
 
 
@@ -82,6 +83,21 @@ class UploadBackendUnavailable(AppError):
 class KbNotFound(AppError):
     status_code = 404
     code: ErrorCode = "KB_NOT_FOUND"
+
+
+class BookingRateLimited(AppError):
+    status_code = 429
+    code: ErrorCode = "BOOKING_RATE_LIMITED"
+
+
+class ValidationFailed(AppError):
+    """VALIDATION_FAILED was declared in the Literal with no subclass anywhere -- Pydantic's
+    own field validators (min_length, max_length) already 422 through FastAPI's default
+    handler without this class. It exists for validation this API does BEYOND what a Field
+    constraint expresses, e.g. /api/book's email-format check on a plain str field."""
+
+    status_code = 422
+    code: ErrorCode = "VALIDATION_FAILED"
 
 
 async def app_error_handler(request: Request, exc: AppError) -> JSONResponse:

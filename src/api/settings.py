@@ -52,8 +52,28 @@ class Settings(BaseSettings):
     max_upload_pages: int = 60
     max_inmemory_kbs: int = 3
 
+    # /api/book (see routes_book.py). Both unset is a supported state -- the route still
+    # validates and rate-limits, it just can't actually deliver mail, and says so rather
+    # than silently pretending to succeed.
+    resend_api_key: str | None = None
+    owner_email: str | None = None
+    owner_name: str = "Reshad Ul Karim"
+
     index_dir: str = "index"
+    # Persona corpus (reshadulkarim.me): a second, independently-built index loaded
+    # alongside the HR one -- see docs/AI_ASSISTANT_PLAN.md sec.4, "same service, second
+    # corpus". Missing is a supported state (main.py's lifespan treats it as best-effort):
+    # the HR demo must keep working even before the persona index has ever been built.
+    persona_index_dir: str = "index_persona"
+    # CORS is same-origin-only until the widget is served from reshadulkarim.me (a
+    # different origin than this API). Comma-separated; empty means no CORSMiddleware is
+    # added at all, so the HR demo's behavior is byte-for-byte unchanged until this is set.
+    cors_allow_origins: str = ""
     log_level: str = "INFO"
+
+    @property
+    def cors_origins(self) -> list[str]:
+        return [o.strip() for o in self.cors_allow_origins.split(",") if o.strip()]
 
     @property
     def generation_available(self) -> bool:
@@ -67,6 +87,10 @@ class Settings(BaseSettings):
     def uploads_persist(self) -> bool:
         """Do uploaded KBs survive a restart? Only if they live off-box."""
         return bool(self.pinecone_api_key)
+
+    @property
+    def booking_available(self) -> bool:
+        return bool(self.resend_api_key and self.owner_email)
 
 
 settings = Settings()
