@@ -13,7 +13,9 @@ from typing import Protocol
 
 
 class Mailer(Protocol):
-    def send(self, to: str, subject: str, text: str, reply_to: str | None = None) -> None: ...
+    def send(
+        self, to: str, subject: str, text: str, html: str | None = None, reply_to: str | None = None
+    ) -> None: ...
 
 
 class ResendMailer:
@@ -30,7 +32,9 @@ class ResendMailer:
     def __init__(self, api_key: str):
         self._api_key = api_key
 
-    def send(self, to: str, subject: str, text: str, reply_to: str | None = None) -> None:
+    def send(
+        self, to: str, subject: str, text: str, html: str | None = None, reply_to: str | None = None
+    ) -> None:
         import httpx
 
         payload: dict[str, object] = {
@@ -39,6 +43,8 @@ class ResendMailer:
             "subject": subject,
             "text": text,
         }
+        if html:
+            payload["html"] = html
         if reply_to:
             payload["reply_to"] = reply_to
         response = httpx.post(

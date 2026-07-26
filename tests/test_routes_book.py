@@ -24,8 +24,8 @@ def _make_client(monkeypatch, sent=None):
     monkeypatch.setattr(routes_book, "_gate", fresh_gate)
 
     if sent is not None:
-        def fake_send(self, to, subject, text, reply_to=None):
-            sent.append({"to": to, "subject": subject, "text": text, "reply_to": reply_to})
+        def fake_send(self, to, subject, text, html=None, reply_to=None):
+            sent.append({"to": to, "subject": subject, "text": text, "html": html, "reply_to": reply_to})
 
         monkeypatch.setattr("src.api.providers.resend.ResendMailer.send", fake_send)
 
@@ -107,3 +107,30 @@ def test_successful_booking_emails_both_owner_and_visitor(monkeypatch):
     owner_mail = next(m for m in sent if m["to"] == "reshad@example.com")
     assert owner_mail["reply_to"] == "recruiter@example.com"
     assert "Discuss an ML engineering role" in owner_mail["text"]
+    assert owner_mail["html"] and "Discuss an ML engineering role" in owner_mail["html"]
+
+
+def test_html_email_escapes_visitor_supplied_content(monkeypatch):
+    """New attack surface introduced by HTML emails: `purpose`/`name` are visitor-controlled
+    and now get embedded in HTML sent to Reshad's inbox. An unescaped '<img onerror=...>' in
+    `purpose` would execute in some email clients -- this must render as inert text."""
+    from src.api.settings import settings
+
+    monkeypatch.setattr(settings, "resend_api_key", "fake-key")
+    monkeypatch.setattr(settings, "owner_email", "reshad@example.com")
+    sent = []
+    client = _make_client(monkeypatch, sent=sent)
+    payload = dict(
+        VALID_BODY,
+        name="<script>alert(1)</script>",
+        purpose='<img src=x onerror="alert(1)">',
+    )
+    res = client.post("/api/book", json=payload)
+    assert res.status_code == 202
+    owner_mail = next(m for m in sent if m["to"] == "reshad@example.com")
+    # The dangerous thing is a live '<script>' or '<img' TAG surviving -- the word "onerror"
+    # as inert escaped text is harmless and expected to still appear in the output.
+    assert "<script>" not in owner_mail["html"]
+    assert "<img" not in owner_mail["html"]
+    assert "&lt;script&gt;" in owner_mail["html"]
+    assert "&lt;img" in owner_mail["html"]
