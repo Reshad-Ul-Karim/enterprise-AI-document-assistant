@@ -6,8 +6,8 @@
   "chunker_version": "1.0.0",
   "chunk_count": 330,
   "source_sha256": {
-    "resume": "8bfe3dfe0ef51f1d",
-    "projects_json": "697878cb3fde311f",
+    "resume": "dd41be19d899ac8c",
+    "projects_json": "bef64ecb060a2dee",
     "publications_json": "efba46f873ce02d1"
   },
   "index_bytes": 1351680
